@@ -6,6 +6,7 @@ import sys
 keywords = {
     'include':'INCLUDE',
     'asm':'ASM',
+    'bool':'BOOL',
     'break':'BREAK',
     'case':'CASE',
     'char':'CHAR',
@@ -62,7 +63,7 @@ tokens = [
         'SUB_ASSIGNOP',
         'MUL_ASSIGNOP',
         'DIV_ASSIGNOP',
-        'MOD_ASSIGN'
+        'MOD_ASSIGNOP',
         
         'AND_ASSIGNOP',
         'XOR_ASSIGNOP',
@@ -98,8 +99,15 @@ tokens = [
         'LSPAREN',
         'RSPAREN',
 
+        # Quotes
+        'SQUOTE',
+        'DQUOTE',
 
         # OTHER
+        'COMMA',
+        'DOT',
+        'SEMICOLON',
+        'COLON',
         ] + list(keywords.values())
 
 
@@ -129,16 +137,10 @@ t_OR_ASSIGNOP   = r'\|='
 t_INCOP   = r'\+\+'
 t_DECOP  = r'--'
 t_BNOP      = r'\~'
-t_LSHIFT    = r'\<\<'
-t_RSHIFT    = r'\>\>'
-t_LSHIFTEQ= r'\<\<='
-t_RSHIFTEQ= r'\>\>='
-
-t_LEFTSHIFT = r'<<'
-t_RIGHTLIFT = r'>>'
-t_LEFTQOP = r'<<='
-t_RIGHTQOP = r'>>='
-
+t_LSHIFT    = r'<<'
+t_RSHIFT    = r'>>'
+t_LSHIFTEQ = r'<<='
+t_RSHIFTEQ = r'>>='
 
 # Comparison Operator
 t_EQCOMP    = r'=='
@@ -167,10 +169,53 @@ t_DOT           = r'\.'
 t_SEMICOLON     = r';'
 t_COLON         = r':'
 
+@TOKEN(r'[a-zA-Z_][0-9a-zA-Z_]*')
+def t_IDENTIFIER(t):
+    t.type = keywords.get(t.value, 'IDENTIFIER')
+    return t
 
-# Build the lexer
-lexer = lex.lex(debug = 0)
+decimal_lit = r'[1-9][0-9]*'
+hex_lit = r'0[xX][0-9a-fA-F]+'
+octal_lit = r'0[0-7]*'
+
+t_NUMBER = '(' + decimal_lit + '|' + hex_lit + '|' + octal_lit + ')'
+
+def t_newline(t):
+    r'\n+'
+    t.lexer.lineno += len(t.value)
+    t.lexer.pos_newline = t.lexpos
+
+# Assuming tab equal to 1 column
+t_ignore = ' \t'
+
+def t_COMMENT(t):
+    r'((//)[^\n\r]*)|(/\*([^*]|[\r\n]|(\*+([^*/]|[\r\n])))*\*+/)'
+    pass
+
+def t_error(t):
+    print("Illegal character '%s'" % t.value[0])
+    t.lexer.skip(1)
+
+# function to find column number
+def find_column(input, token):
+    line_start = input.rfind('\n', 0, token.lexpos) + 1
+    return (token.lexpos - line_start) + 1
 
 if __name__ == "__main__":
-    
 
+    # Build the lexer
+    lexer = lex.lex(debug = 0)
+    lexer.pos_newline = -1 # to calculate column number from lexpos
+    
+    with open(sys.argv[1], "r") as f:
+        inp = f.read()
+    lexer.input(inp)
+    
+    print("Token", "Lexeme", "Line#", "Column#", sep="\t\t\t")
+    while True:
+        tok = lexer.token()
+        if tok:
+            print(tok.type, tok.value, tok.lineno, tok.lexpos - lexer.pos_newline, sep="\t\t\t")
+            # print(tok)
+        else:
+            break
