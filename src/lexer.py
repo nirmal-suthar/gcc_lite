@@ -45,6 +45,8 @@ tokens = [
         # id and no
         'IDENTIFIER',
         'NUMBER',
+        'STRING_LITERAL',
+        'CHAR_LITERAL',
 
         # arithematic operator
         'PLUSOP',
@@ -179,6 +181,8 @@ hex_lit = r'0[xX][0-9a-fA-F]+'
 octal_lit = r'0[0-7]*'
 
 t_NUMBER = '(' + decimal_lit + '|' + hex_lit + '|' + octal_lit + ')'
+t_STRING_LITERAL    = r'\"([^\\\n]|(\\.))*?\"'
+t_CHAR_LITERAL      = r"\'([^\\\n]|(\\.))?\'"
 
 def t_newline(t):
     r'\n+'
@@ -212,10 +216,15 @@ if __name__ == "__main__":
     lexer.input(inp)
     
     print("Token", "Lexeme", "Line#", "Column#", sep="\t\t\t")
+    print(80*"-")
     while True:
         tok = lexer.token()
         if tok:
-            print(tok.type, tok.value, tok.lineno, tok.lexpos - lexer.pos_newline, sep="\t\t\t")
-            # print(tok)
+            lineno = str(tok.lineno)
+            columnno = str(tok.lexpos - lexer.pos_newline)
+            print(tok.type,(24-len(tok.type))*" ", end="")
+            print(tok.value,(24-len(tok.value))*" ", end="")
+            print(lineno,(24-len(lineno))*" ", end="")
+            print(columnno,(24-len(columnno))*" ")
         else:
             break
