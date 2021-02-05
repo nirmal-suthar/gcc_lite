@@ -188,9 +188,43 @@ def t_newline(t):
 # Assuming tab equal to 1 column
 t_ignore = ' \t'
 
-def t_COMMENT(t):
-    r'((//)[^\n\r]*)|(/\*([^*]|[\r\n]|(\*+([^*/]|[\r\n])))*\*+/)'
+# oneline comment
+def t_oneline_comment(t):
+    r'//(.)*'
     pass
+
+# States for multiline comment handling
+
+states = (
+    ('mcomment', 'exclusive'),
+)
+
+# multiline comment begins
+def t_mcomment(t):
+    r'/\*'
+    t.lexer.push_state('mcomment')
+
+# handle newline in mcomment state
+def t_mcomment_newline(t):
+    r'\n+'
+    t.lexer.lineno += len(t.value)
+    t.lexer.pos_newline = t.lexpos
+
+# multiline comment ends
+def t_mcomment_end(t):
+    r'.*\*/'
+    t.lexer.pop_state()
+
+# ignore anything that ends with newline in multiline comment
+t_mcomment_ignore_comment = r'.*(?=(\n))' 
+
+# ignore and error rule for mcomment
+
+t_mcomment_ignore = ''
+
+def t_mcomment_error(t):
+    print("Incorrect comment syntax")
+
 
 def t_error(t):
     print("Illegal character '%s'" % t.value[0])
