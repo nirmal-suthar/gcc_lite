@@ -190,13 +190,13 @@ octal_lit = r'0[0-7]*'
 int_suffix = '(((u|U)(ll|LL|l|L)?)|((ll|LL|l|L)(u|U)?))'
 float_suffix = '[fFlL]'
 number_constant = '((' + decimal_lit + ')|(' + hex_lit + ')|(' + octal_lit + '))(' + int_suffix + ')?'
-char_constant = r"\'([^\\\n]|(\\.))?\'"
+char_constant = r'\'([^\'\\\n]|(\\.))?\''
 float_constant = r'(\d+([Ee][+-]?\d+))|((\d*\.\d+([Ee][+-]?\d+)?)|(\d+\.\d*([Ee][+-]?\d+)?))'+float_suffix+'?'
 bool_constant = '(true)|(false)'
 
 t_CONSTANT = '(' + float_constant + ')|(' + number_constant + ')|(' + char_constant + ')|(' + bool_constant + ')'
 
-t_STRING_LITERAL    = r'\"([^\\\n]|(\\.))*\"'
+t_STRING_LITERAL    = r'\"([^"\\\n]|(\\.))*\"'
 
 def t_newline(t):
     r'\n+'
