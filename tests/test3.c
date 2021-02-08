@@ -2,7 +2,7 @@ extern char *name;
 
 
 typedef struct cs335{
-    char[60] name;
+    char name[60];
     int grpno;
     char grade;
 } cs335;

@@ -225,53 +225,14 @@ t_ignore = ' \t\v\f'
 def t_newline(t):
     r'\n+'
     t.lexer.lineno += len(t.value)
-    t.lexer.pos_newline = t.lexpos
+    # t.lexer.pos_newline = t.lexpos #FIXME: redundant
 
-# # Handling Comments
+# Handling Comments
 @TOKEN(r'(//.*|/\*(\*(?!/)|[^*])*\*/)')
 def t_COMMENT(t):
     # Update line number according to no. of newline.
-    t.lexer.lineno += ((t.value.count("\n")) - 1)
+    t.lexer.lineno += (t.value.count("\n"))
     pass
-
-# # Hnadling Oneline Comment
-# def t_oneline_comment(t):
-#     r'//(.)*'
-#     pass
-
-# # STARTS: Handling Mutliline Comment 
-
-# # States for Multiline Comment handling
-# states = (
-#     ('mcomment', 'exclusive'),
-# )
-
-# # multiline comment begins
-# def t_mcomment(t):
-#     r'/\*'
-#     t.lexer.push_state('mcomment')
-
-# # handle newline in mcomment state
-# def t_mcomment_newline(t):
-#     r'\n+'
-#     t.lexer.lineno += len(t.value)
-#     t.lexer.pos_newline = t.lexpos
-
-# # multiline comment ends
-# def t_mcomment_end(t):
-#     r'.*\*/'
-#     t.lexer.pop_state()
-
-# # ignore anything that ends with newline in multiline comment
-# t_mcomment_ignore_comment = r'.+'
-
-# # ignore and error rule for mcomment
-# t_mcomment_ignore = ''
-
-# def t_mcomment_error(t):
-#     print("Incorrect comment syntax")
-
-# # ENDS: Handling Mutliline Comment 
 
 # Error function
 def t_error(t):
@@ -289,7 +250,7 @@ if __name__ == "__main__":
     lexer = lex.lex(debug = 0)
 
     # Calculate column number from lexpos
-    lexer.pos_newline = -1 
+    # lexer.pos_newline = -1  #FIXME: redundant
     
     with open(sys.argv[1], "r") as f:
         inp = f.read()
