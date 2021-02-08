@@ -1,5 +1,6 @@
 from ply import lex
 from ply.lex import TOKEN
+from tabulate import tabulate
 import re
 import sys
 
@@ -272,22 +273,23 @@ if __name__ == "__main__":
 
     # Build the lexer
     lexer = lex.lex(debug = 0)
-    lexer.pos_newline = -1 # to calculate column number from lexpos
+
+    # Calculate column number from lexpos
+    lexer.pos_newline = -1 
     
     with open(sys.argv[1], "r") as f:
         inp = f.read()
     lexer.input(inp)
     
-    print("Token", "Lexeme", "Line#", "Column#", sep="\t\t\t")
-    print(80*"-")
+
+    tokenList = []
     while True:
         tok = lexer.token()
         if tok:
             lineno = str(tok.lineno)
             columnno = str(tok.lexpos - lexer.pos_newline)
-            print(tok.type,(24-len(tok.type))*" ", end="")
-            print(tok.value,(24-len(tok.value))*" ", end="")
-            print(lineno,(24-len(lineno))*" ", end="")
-            print(columnno,(24-len(columnno))*" ")
+            tokenList.append([tok.type,tok.value,lineno,columnno])
         else:
             break
+    
+    print(tabulate(tokenList, headers=["Token", "Lexeme", "Line#", "Column#"]))
