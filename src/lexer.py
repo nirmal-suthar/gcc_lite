@@ -203,10 +203,17 @@ I_SUFFIX = '(((u|U)(ll|LL|l|L)?)|((ll|LL|l|L)(u|U)?))'
 F_SUFFIX = '[fFlL]'
 
 F_EXP_LIT = r'(\d+([Ee][+-]?\d+))|((\d*\.\d+([Ee][+-]?\d+)?)|(\d+\.\d*([Ee][+-]?\d+)?))'
-# TODO: add hex float number if needed (as per ANSCI C spec)
+# TODO: add hex float number if needed (as per ANSI C spec)
 
-t_I_CONSTANT = '(('+')|('.join([I_DECIMAL_LIT,I_HEX_LIT,I_OCTAL_LIT])+'))('+I_SUFFIX+')?'
-t_F_CONSTANT = '(('+')|('.join([F_EXP_LIT])+'))('+F_SUFFIX+')?'
+@TOKEN('(('+')|('.join([F_EXP_LIT])+'))('+F_SUFFIX+')?')
+def t_F_CONSTANT(t):
+    return t
+
+@TOKEN('(('+')|('.join([I_DECIMAL_LIT,I_HEX_LIT,I_OCTAL_LIT])+'))('+I_SUFFIX+')?')
+def t_I_CONSTANT(t):
+    return t
+
+
 t_B_CONSTANT = '(true)|(false)'
 t_C_CONSTANT = r'\'([^\'\\\n]|(\\.))?\''
 t_STRING_LITERAL    = r'\"([^"\\\n]|(\\.))*\"'
