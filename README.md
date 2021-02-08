@@ -12,9 +12,8 @@ C-Compiler (project+assignment) for course CS335, 2021 - II
 
 ### For building executable
 ```bash
-$ cd src
 $ make
-$ cd ..
+$ make clean # For removing the build
 ```
 
 ### For executing scanner

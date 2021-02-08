@@ -1,19 +1,17 @@
 from ply import lex
 from ply.lex import TOKEN
+from tabulate import tabulate
 import re
 import sys
 
 keywords = {
-    'include':'INCLUDE',
     'asm':'ASM',
-    'bool':'BOOL',
     'break':'BREAK',
     'case':'CASE',
     'char':'CHAR',
     'const':'CONST',
     'continue':'CONTINUE',
     'default':'DEFAULT',
-    'delete':'DELETE',
     'do':'DO',
     'double':'DOUBLE',
     'else':'ELSE',
@@ -23,6 +21,7 @@ keywords = {
     'for':'FOR',
     'goto':'GOTO',
     'if':'IF',
+    'inline':'INLINE',
     'int':'INT',
     'long':'LONG',
     'return':'RETURN',
@@ -38,75 +37,86 @@ keywords = {
     'void':'VOID',
     'volatile':'VOLATILE',
     'while':'WHILE',
+    '_Alignas':'ALIGNAS',
+    '_Alignof':'ALIGNOF',
+    '_Atomic':'ATOMIC',
+    '_Bool':'BOOL',
+    '_Complex':'COMPLEX',
+    '_Generic':'GENERIC',
+    '_Imaginary':'IMAGINARY',
+    '_Noreturn':'NORETURN',
+    '_Static_assert':'STATIC_ASSERT',
+    '_Thread_local':'THREAD_LOCAL',
+    '__func__':'FUNC_NAME',
 }
 
 # List of token names. 
 tokens = [
-        # id and no
+        # ID
         'IDENTIFIER',
-        'CONSTANT',
+
+        # Constant 
+        'I_CONSTANT',
+        'F_CONSTANT',
+        'B_CONSTANT',
+        'C_CONSTANT',
         'STRING_LITERAL',
 
-        # arithematic operator
-        'PLUSOP',
-        'MINUSOP',
-        'DIVOP',
-        'MULTOP',
-        'MODOP',
+        # Arithematic Operator
+        'MINUS_OP',
+        'PLUS_OP',
+        'MULT_OP',
+        'DIV_OP',
+        'MOD_OP',
 
-        'XOROP',
-        'SOROP',
-        'OROP',
-        'SANDOP',
-        'ANDOP',
-        'NOTOP',
+        # Bit Operator
+        'XOR_OP',
+        'OR_OP',
+        'S_OR_OP',
+        'S_AND_OP',
+        'AND_OP',
+        'NOT_OP',
+        'LSHIFT_OP',
+        'RSHIFT_OP',
+
+        # Arithmetic Assignment
+        'ADD_ASSIGN',
+        'SUB_ASSIGN',
+        'MUL_ASSIGN',
+        'DIV_ASSIGN',
+        'MOD_ASSIGN',
         
-        'ADD_ASSIGNOP',
-        'SUB_ASSIGNOP',
-        'MUL_ASSIGNOP',
-        'DIV_ASSIGNOP',
-        'MOD_ASSIGNOP',
-        
-        'AND_ASSIGNOP',
-        'XOR_ASSIGNOP',
-        'OR_ASSIGNOP',
+        # Bit Assignment
+        'AND_ASSIGN',
+        'XOR_ASSIGN',
+        'OR_ASSIGN',
+        'LSHIFT_ASSIGN',
+        'RSHIFT_ASSIGN',
 
-        'INCOP',
-        'DECOP',
-        'PTROP',
-        'BNOP',
-        'LSHIFTOP',
-        'RSHIFTOP',
-        'LSHIFTEQOP',
-        'RSHIFTEQOP',
+        # Misc Operator
+        'INC_OP',
+        'DEC_OP',
+        'PTR_OP',
+        'BN_OP',
 
-        'LSHIFT',
-        'RSHIFT',
-        'LSHIFTEQ',
-        'RSHIFTEQ',
-
-        #comparison operator, =
-        'EQCOMP',
-        'NEQCOMP',
-        'GTCOMP',
-        'GTECOMP',
-        'LTCOMP',
-        'LTECOMP',
+        # Comparison Operator
+        'EQ_OP',
+        'NEQ_OP',
+        'GT_OP',
+        'GEQ_OP',
+        'LT_OP',
+        'LEQ_OP',
         'EQUAL',
 
         # Parenthesis
-        'LPAREN',
-        'RPAREN',
-        'LCPAREN',
-        'RCPAREN',
-        'LSPAREN',
-        'RSPAREN',
+        'L_PAREN',
+        'R_PAREN',
+        'LC_PAREN',
+        'RC_PAREN',
+        'LS_PAREN',
+        'RS_PAREN',
 
-        # Quotes
-        'SQUOTE',
-        'DQUOTE',
-
-        # OTHER
+        # Other
         'COMMA',
         'DOT',
         'SEMICOLON',
@@ -117,58 +127,58 @@ tokens = [
 
 
 # Arithematic Operator
-t_PLUSOP    = r'\+'
-t_MINUSOP   = r'-'
-t_DIVOP     = r'/'
-t_MULTOP    = r'\*'
-t_MODOP     = r'%'
+t_PLUS_OP       = r'\+'
+t_MINUS_OP      = r'-'
+t_DIV_OP        = r'/'
+t_MULT_OP       = r'\*'
+t_MOD_OP        = r'%'
 
-t_XOROP     = r'\^'
-t_SOROP     = r'\|' #single or
-t_OROP      = r'\|\|'
-t_SANDOP    = r'&'  #single and
-t_ANDOP     = r'&&'
-t_NOTOP     = r'!'
+# Bit Operator
+t_XOR_OP        = r'\^'
+t_S_OR_OP       = r'\|' #single or
+t_OR_OP         = r'\|\|'
+t_S_AND_OP      = r'&'  #single and
+t_AND_OP        = r'&&'
+t_NOT_OP        = r'!'
+t_LSHIFT_OP     = r'<<'
+t_RSHIFT_OP     = r'>>'
 
-t_ADD_ASSIGNOP  = r'\+='
-t_MOD_ASSIGNOP   = r'%='
-t_SUB_ASSIGNOP = r'-='
-t_MUL_ASSIGNOP  = r'\*='
-t_DIV_ASSIGNOP   = r'/='
+# Arithmetic Assignment
+t_ADD_ASSIGN    = r'\+='
+t_MOD_ASSIGN    = r'%='
+t_SUB_ASSIGN    = r'-='
+t_MUL_ASSIGN    = r'\*='
+t_DIV_ASSIGN    = r'/='
 
-t_AND_ASSIGNOP  = r'&='
-t_XOR_ASSIGNOP   = r'\^='
-t_OR_ASSIGNOP   = r'\|='
+# Bit Assignment
+t_AND_ASSIGN    = r'&='
+t_XOR_ASSIGN    = r'\^='
+t_OR_ASSIGN     = r'\|='
+t_LSHIFT_ASSIGN = r'<<='
+t_RSHIFT_ASSIGN = r'>>='
 
-t_INCOP   = r'\+\+'
-t_DECOP  = r'--'
-t_PTROP  = r'->'
-t_BNOP      = r'~'
-t_LSHIFT    = r'<<'
-t_RSHIFT    = r'>>'
-t_LSHIFTEQ = r'<<='
-t_RSHIFTEQ = r'>>='
+# Misc Operator
+t_INC_OP        = r'\+\+'
+t_DEC_OP        = r'--'
+t_PTR_OP        = r'->'
+t_BN_OP         = r'~'
 
 # Comparison Operator
-t_EQCOMP    = r'=='
-t_NEQCOMP   = r'!='
-t_GTCOMP    = r'>'
-t_GTECOMP   = r'>='
-t_LTCOMP    = r'<'
-t_LTECOMP   = r'<='
-t_EQUAL     = r'='
+t_EQ_OP         = r'=='
+t_NEQ_OP        = r'!='
+t_GT_OP         = r'>'
+t_GEQ_OP        = r'>='
+t_LT_OP         = r'<'
+t_LEQ_OP        = r'<='
+t_EQUAL         = r'='
 
 # Parenthesis
-t_LPAREN   = r'\('
-t_RPAREN   = r'\)'
-t_LCPAREN   = r'{|(<%)'
-t_RCPAREN   = r'}|(%>)'
-t_LSPAREN   = r'(\[)|(<:)'
-t_RSPAREN   = r'(\])|(:>)'
-
-# Quotes
-t_SQUOTE    = r'\''
-t_DQUOTE    = r'\"'
+t_L_PAREN       = r'\('
+t_R_PAREN       = r'\)'
+t_LC_PAREN      = r'{|(<%)'
+t_RC_PAREN      = r'}|(%>)'
+t_LS_PAREN      = r'(\[)|(<:)'
+t_RS_PAREN      = r'(\])|(:>)'
 
 # Other
 t_COMMA         = r','
@@ -183,36 +193,41 @@ def t_IDENTIFIER(t):
     t.type = keywords.get(t.value, 'IDENTIFIER')
     return t
 
-# constants 
-decimal_lit = r'[1-9][0-9]*'
-hex_lit = r'0[xX][0-9a-fA-F]+'
-octal_lit = r'0[0-7]*'
-int_suffix = '(((u|U)(ll|LL|l|L)?)|((ll|LL|l|L)(u|U)?))'
-float_suffix = '[fFlL]'
-number_constant = '((' + decimal_lit + ')|(' + hex_lit + ')|(' + octal_lit + '))(' + int_suffix + ')?'
-char_constant = r'\'([^\'\\\n]|(\\.))?\''
-float_constant = r'(\d+([Ee][+-]?\d+))|((\d*\.\d+([Ee][+-]?\d+)?)|(\d+\.\d*([Ee][+-]?\d+)?))'+float_suffix+'?'
-bool_constant = '(true)|(false)'
+# constants
+ 
+I_DECIMAL_LIT = r'[1-9][0-9]*'
+I_HEX_LIT = r'0[xX][0-9a-fA-F]+'
+I_OCTAL_LIT = r'0[0-7]*'
 
-t_CONSTANT = '(' + float_constant + ')|(' + number_constant + ')|(' + char_constant + ')|(' + bool_constant + ')'
+I_SUFFIX = '(((u|U)(ll|LL|l|L)?)|((ll|LL|l|L)(u|U)?))'
+F_SUFFIX = '[fFlL]'
 
+F_EXP_LIT = r'(\d+([Ee][+-]?\d+))|((\d*\.\d+([Ee][+-]?\d+)?)|(\d+\.\d*([Ee][+-]?\d+)?))'
+# TODO: add hex float number if needed (as per ANSCI C spec)
+
+t_I_CONSTANT = '(('+')|('.join([I_DECIMAL_LIT,I_HEX_LIT,I_OCTAL_LIT])+'))('+I_SUFFIX+')?'
+t_F_CONSTANT = '(('+')|('.join([F_EXP_LIT])+'))('+F_SUFFIX+')?'
+t_B_CONSTANT = '(true)|(false)'
+t_C_CONSTANT = r'\'([^\'\\\n]|(\\.))?\''
 t_STRING_LITERAL    = r'\"([^"\\\n]|(\\.))*\"'
 
+# Assuming tab equal to 1 column
+t_ignore = ' \t\v\f'
+
+# New line
 def t_newline(t):
     r'\n+'
     t.lexer.lineno += len(t.value)
     t.lexer.pos_newline = t.lexpos
 
-# Assuming tab equal to 1 column
-t_ignore = ' \t\v\f'
-
-# oneline comment
+# Hnadling Oneline Comment
 def t_oneline_comment(t):
     r'//(.)*'
     pass
 
-# States for multiline comment handling
+# STARTS: Handling Mutliline Comment 
 
+# States for Multiline Comment handling
 states = (
     ('mcomment', 'exclusive'),
 )
@@ -237,18 +252,19 @@ def t_mcomment_end(t):
 t_mcomment_ignore_comment = r'.+'
 
 # ignore and error rule for mcomment
-
 t_mcomment_ignore = ''
 
 def t_mcomment_error(t):
     print("Incorrect comment syntax")
 
+# ENDS: Handling Mutliline Comment 
 
+# Error function
 def t_error(t):
     print("Illegal character '%s'" % t.value[0])
     t.lexer.skip(1)
 
-# function to find column number
+# Function to find column number
 def find_column(input, token):
     line_start = input.rfind('\n', 0, token.lexpos) + 1
     return (token.lexpos - line_start) + 1
@@ -257,22 +273,23 @@ if __name__ == "__main__":
 
     # Build the lexer
     lexer = lex.lex(debug = 0)
-    lexer.pos_newline = -1 # to calculate column number from lexpos
+
+    # Calculate column number from lexpos
+    lexer.pos_newline = -1 
     
     with open(sys.argv[1], "r") as f:
         inp = f.read()
     lexer.input(inp)
     
-    print("Token", "Lexeme", "Line#", "Column#", sep="\t\t\t")
-    print(80*"-")
+
+    tokenList = []
     while True:
         tok = lexer.token()
         if tok:
             lineno = str(tok.lineno)
             columnno = str(tok.lexpos - lexer.pos_newline)
-            print(tok.type,(24-len(tok.type))*" ", end="")
-            print(tok.value,(24-len(tok.value))*" ", end="")
-            print(lineno,(24-len(lineno))*" ", end="")
-            print(columnno,(24-len(columnno))*" ")
+            tokenList.append([tok.type,tok.value,lineno,columnno])
         else:
             break
+    
+    print(tabulate(tokenList, headers=["Token", "Lexeme", "Line#", "Column#"]))
