@@ -58,7 +58,6 @@ tokens = [
         # Constant 
         'I_CONSTANT',
         'F_CONSTANT',
-        'B_CONSTANT',
         'C_CONSTANT',
         'STRING_LITERAL',
 
@@ -213,9 +212,7 @@ def t_F_CONSTANT(t):
 def t_I_CONSTANT(t):
     return t
 
-
-t_B_CONSTANT = '(true)|(false)'
-t_C_CONSTANT = r'\'([^\'\\\n]|(\\.))?\''
+t_C_CONSTANT = r'\'([^\'\\\n]|(\\.))\''
 t_STRING_LITERAL    = r'\"([^"\\\n]|(\\.))*\"'
 
 # Assuming tab equal to 1 column
