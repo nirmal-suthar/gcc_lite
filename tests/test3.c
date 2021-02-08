@@ -1,14 +1,36 @@
-// comment test case
+extern char *name;
+
+
+typedef struct cs335{
+    char[60] name;
+    int grpno;
+    char grade;
+} cs335;
+
 int main(){
-    int aa_1 = 1 + 2;
-    int b; /* start of comment
-    one line
-        second line
-            c + d
-            */ char x = 'c';
-	double d = 34e-3;
-	int c= 070ll;
-	int a = 1 | 2 & 3 + -c;
-	char * c = "New string $%@# \n 	4";
+    cs335 Student_A;
+    cs335 *p_Student_A = &Student_A;
+    printf("Size of struct %d",sizeof(Student_A));
+
+    if(p_Student_A->grade == Student_A.grade){
+        char verdict[] = "PASS";
+    }
+    else if(p_Student_A->name != Student_A.name){
+        char verdict[] = "FAIL\n";
+    }
+    else{
+        char verdict[] = "STILL FAILED";
+        int a=0;
+        for(int i=0;i<=50;i++){
+            a+= i;
+            if(a==0){
+                continue;
+            }            
+            else{
+                break;
+            }
+        }
+    }
+
     return 0;
 }

@@ -52,6 +52,9 @@ keywords = {
 
 # List of token names. 
 tokens = [
+        # Comment
+        'COMMENT',
+        
         # ID
         'IDENTIFIER',
 
@@ -224,44 +227,51 @@ def t_newline(t):
     t.lexer.lineno += len(t.value)
     t.lexer.pos_newline = t.lexpos
 
-# Hnadling Oneline Comment
-def t_oneline_comment(t):
-    r'//(.)*'
+# # Handling Comments
+@TOKEN(r'(//.*|/\*(\*(?!/)|[^*])*\*/)')
+def t_COMMENT(t):
+    # Update line number according to no. of newline.
+    t.lexer.lineno += ((t.value.count("\n")) - 1)
     pass
 
-# STARTS: Handling Mutliline Comment 
+# # Hnadling Oneline Comment
+# def t_oneline_comment(t):
+#     r'//(.)*'
+#     pass
 
-# States for Multiline Comment handling
-states = (
-    ('mcomment', 'exclusive'),
-)
+# # STARTS: Handling Mutliline Comment 
 
-# multiline comment begins
-def t_mcomment(t):
-    r'/\*'
-    t.lexer.push_state('mcomment')
+# # States for Multiline Comment handling
+# states = (
+#     ('mcomment', 'exclusive'),
+# )
 
-# handle newline in mcomment state
-def t_mcomment_newline(t):
-    r'\n+'
-    t.lexer.lineno += len(t.value)
-    t.lexer.pos_newline = t.lexpos
+# # multiline comment begins
+# def t_mcomment(t):
+#     r'/\*'
+#     t.lexer.push_state('mcomment')
 
-# multiline comment ends
-def t_mcomment_end(t):
-    r'.*\*/'
-    t.lexer.pop_state()
+# # handle newline in mcomment state
+# def t_mcomment_newline(t):
+#     r'\n+'
+#     t.lexer.lineno += len(t.value)
+#     t.lexer.pos_newline = t.lexpos
 
-# ignore anything that ends with newline in multiline comment
-t_mcomment_ignore_comment = r'.+'
+# # multiline comment ends
+# def t_mcomment_end(t):
+#     r'.*\*/'
+#     t.lexer.pop_state()
 
-# ignore and error rule for mcomment
-t_mcomment_ignore = ''
+# # ignore anything that ends with newline in multiline comment
+# t_mcomment_ignore_comment = r'.+'
 
-def t_mcomment_error(t):
-    print("Incorrect comment syntax")
+# # ignore and error rule for mcomment
+# t_mcomment_ignore = ''
 
-# ENDS: Handling Mutliline Comment 
+# def t_mcomment_error(t):
+#     print("Incorrect comment syntax")
+
+# # ENDS: Handling Mutliline Comment 
 
 # Error function
 def t_error(t):
@@ -291,7 +301,8 @@ if __name__ == "__main__":
         tok = lexer.token()
         if tok:
             lineno = str(tok.lineno)
-            columnno = str(tok.lexpos - lexer.pos_newline)
+            columnno = str(find_column(inp, tok))
+            # columnno = str(tok.lexpos - lexer.pos_newline) #TODO: failing
             tokenList.append([tok.type,tok.value,lineno,columnno])
         else:
             break
