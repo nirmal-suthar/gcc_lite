@@ -67,9 +67,8 @@ tokens = [
         # Bit Operator
         'OR_OP',
         'AND_OP',
-        'NOT_OP',
-        'LSHIFT_OP',
-        'RSHIFT_OP',
+        'LEFT_OP',
+        'RIGHT_OP',
 
         # Arithmetic Assignment
         'ADD_ASSIGN',
@@ -82,8 +81,8 @@ tokens = [
         'AND_ASSIGN',
         'XOR_ASSIGN',
         'OR_ASSIGN',
-        'LSHIFT_ASSIGN',
-        'RSHIFT_ASSIGN',
+        'LEFT_ASSIGN',
+        'RIGHT_ASSIGN',
 
         # Misc Operator
         'INC_OP',
@@ -92,9 +91,9 @@ tokens = [
 
         # Comparison Operator
         'EQ_OP',
-        'NEQ_OP',
-        'GEQ_OP',
-        'LEQ_OP',
+        'NE_OP',
+        'GE_OP',
+        'LE_OP',
 
         # Other
         'ELLIPSIS',
@@ -106,7 +105,7 @@ literals = [
         # Arithematic Operator
         '-', '+', '*', 
         '/', '%', '=',
-        '>', '<',
+        '>', '<'
 
         # Parenthesis
         '(', ')',
@@ -125,9 +124,8 @@ literals = [
 # Bit Operator
 t_OR_OP         = r'\|\|'
 t_AND_OP        = r'&&'
-t_NOT_OP        = r'!'
-t_LSHIFT_OP     = r'<<'
-t_RSHIFT_OP     = r'>>'
+t_LEFT_OP       = r'<<'
+t_RIGHT_OP      = r'>>'
 
 # Arithmetic Assignment
 t_ADD_ASSIGN    = r'\+='
@@ -140,8 +138,8 @@ t_DIV_ASSIGN    = r'/='
 t_AND_ASSIGN    = r'&='
 t_XOR_ASSIGN    = r'\^='
 t_OR_ASSIGN     = r'\|='
-t_LSHIFT_ASSIGN = r'<<='
-t_RSHIFT_ASSIGN = r'>>='
+t_LEFT_ASSIGN   = r'<<='
+t_RIGHT_ASSIGN  = r'>>='
 
 # Misc Operator
 t_INC_OP        = r'\+\+'
@@ -150,9 +148,9 @@ t_PTR_OP        = r'->'
 
 # Comparison Operator
 t_EQ_OP         = r'=='
-t_NEQ_OP        = r'!='
-t_GEQ_OP        = r'>='
-t_LEQ_OP        = r'<='
+t_NE_OP         = r'!='
+t_GE_OP         = r'>='
+t_LE_OP         = r'<='
 
 # Other
 t_ELLIPSIS      = r'\.\.\.'
@@ -186,6 +184,7 @@ def t_IDENTIFIER(t):
     return t
 
 # Constants
+
 I_DECIMAL_LIT = r'[1-9][0-9]*'
 I_HEX_LIT = r'0[xX][0-9a-fA-F]+'
 I_OCTAL_LIT = r'0[0-7]*'
