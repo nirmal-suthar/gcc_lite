@@ -1,4 +1,4 @@
-int main(){
+int main()<%
 
 	int int1 = 1234567890;
 	int int2 = 0x123aBC;
@@ -25,4 +25,4 @@ int main(){
 	int b[] = {1,2,3};
 
 	return 0;
-}
+%>

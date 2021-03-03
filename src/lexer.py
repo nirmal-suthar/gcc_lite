@@ -64,18 +64,8 @@ tokens = [
         'C_CONSTANT',
         'STRING_LITERAL',
 
-        # Arithematic Operator
-        'MINUS_OP',
-        'PLUS_OP',
-        'MULT_OP',
-        'DIV_OP',
-        'MOD_OP',
-
         # Bit Operator
-        'XOR_OP',
         'OR_OP',
-        'S_OR_OP',
-        'S_AND_OP',
         'AND_OP',
         'NOT_OP',
         'LSHIFT_OP',
@@ -99,47 +89,41 @@ tokens = [
         'INC_OP',
         'DEC_OP',
         'PTR_OP',
-        'BN_OP',
 
         # Comparison Operator
         'EQ_OP',
         'NEQ_OP',
-        'GT_OP',
         'GEQ_OP',
-        'LT_OP',
         'LEQ_OP',
-        'EQUAL',
-
-        # Parenthesis
-        'L_PAREN',
-        'R_PAREN',
-        'LC_PAREN',
-        'RC_PAREN',
-        'LS_PAREN',
-        'RS_PAREN',
 
         # Other
-        'COMMA',
-        'DOT',
-        'SEMICOLON',
-        'COLON',
         'ELLIPSIS',
-        'QMARK',
+
         ] + list(keywords.values())
 
+literals = [
 
-# Arithematic Operator
-t_PLUS_OP       = r'\+'
-t_MINUS_OP      = r'-'
-t_DIV_OP        = r'/'
-t_MULT_OP       = r'\*'
-t_MOD_OP        = r'%'
+        # Arithematic Operator
+        '-', '+', '*', 
+        '/', '%', '=',
+        '>', '<',
+
+        # Parenthesis
+        '(', ')',
+        '[', ']',
+        '{', '}',
+
+        # Bit Operator
+        '.', '&', '!',
+        '~', '|', '^',
+
+        # Other
+        ';', ',',
+        ':', '?',
+        ]
 
 # Bit Operator
-t_XOR_OP        = r'\^'
-t_S_OR_OP       = r'\|' #single or
 t_OR_OP         = r'\|\|'
-t_S_AND_OP      = r'&'  #single and
 t_AND_OP        = r'&&'
 t_NOT_OP        = r'!'
 t_LSHIFT_OP     = r'<<'
@@ -163,40 +147,45 @@ t_RSHIFT_ASSIGN = r'>>='
 t_INC_OP        = r'\+\+'
 t_DEC_OP        = r'--'
 t_PTR_OP        = r'->'
-t_BN_OP         = r'~'
 
 # Comparison Operator
 t_EQ_OP         = r'=='
 t_NEQ_OP        = r'!='
-t_GT_OP         = r'>'
 t_GEQ_OP        = r'>='
-t_LT_OP         = r'<'
 t_LEQ_OP        = r'<='
-t_EQUAL         = r'='
-
-# Parenthesis
-t_L_PAREN       = r'\('
-t_R_PAREN       = r'\)'
-t_LC_PAREN      = r'{|(<%)'
-t_RC_PAREN      = r'}|(%>)'
-t_LS_PAREN      = r'(\[)|(<:)'
-t_RS_PAREN      = r'(\])|(:>)'
 
 # Other
-t_COMMA         = r','
-t_DOT           = r'\.'
-t_SEMICOLON     = r';'
-t_COLON         = r':'
 t_ELLIPSIS      = r'\.\.\.'
-t_QMARK         = r'\?'
 
+# Curly Paranthesis
+@TOKEN(r'{|(<%)')
+def t_LC_PAREN(t):
+    t.type = '{'
+    return t
+
+@TOKEN(r'}|(%>)')
+def t_RC_PAREN(t):
+    t.type = '}'
+    return t
+
+# Square Parenthesis
+@TOKEN(r'(\[)|(<:)')
+def t_LS_PAREN(t):
+    t.type = '['
+    return t
+
+@TOKEN(r'(\])|(:>)')
+def t_RS_PAREN(t):
+    t.type = ']'
+    return t
+
+# Identifier
 @TOKEN(r'[a-zA-Z_][0-9a-zA-Z_]*')
 def t_IDENTIFIER(t):
     t.type = keywords.get(t.value, 'IDENTIFIER')
     return t
 
-# constants
- 
+# Constants
 I_DECIMAL_LIT = r'[1-9][0-9]*'
 I_HEX_LIT = r'0[xX][0-9a-fA-F]+'
 I_OCTAL_LIT = r'0[0-7]*'
