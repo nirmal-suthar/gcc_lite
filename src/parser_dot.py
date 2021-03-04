@@ -1,9 +1,9 @@
 import sys
 import pydot
-import parser.y.parser as parser
+from parser import parser
 
 def generate_dot(graph, tree, node_idx):
-    """Get a list of node and edge declarations."""
+    """ Node and edge declarations."""
     if type(tree) is str:
         graph.add_node(pydot.Node(node_idx, label=tree, shape='house', style='filled', color='yellowgreen'))
         return node_idx
@@ -12,7 +12,7 @@ def generate_dot(graph, tree, node_idx):
         cur_idx = node_idx
         for child in tree[1:]:
             graph.add_edge(pydot.Edge(node_idx, cur_idx+1))
-            cur_idx += generate_dot(graph, child, cur_idx+1)
+            cur_idx = generate_dot(graph, child, cur_idx+1)
         return cur_idx
     else:
         raise Exception('invalid type of tree')

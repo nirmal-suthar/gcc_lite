@@ -1,3 +1,4 @@
 certifi==2020.12.5
 ply==3.11
 tabulate==0.8.7
+pydot==1.4.2

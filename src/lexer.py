@@ -5,7 +5,8 @@ import re
 import sys
 
 keywords = {
-    'asm':'ASM',
+    # 'asm':'ASM',
+    'auto':'AUTO',
     'break':'BREAK',
     'case':'CASE',
     'char':'CHAR',
@@ -24,6 +25,7 @@ keywords = {
     'inline':'INLINE',
     'int':'INT',
     'long':'LONG',
+    'register':'REGISTER',
     'return':'RETURN',
     'short':'SHORT',
     'signed':'SIGNED',
@@ -32,6 +34,7 @@ keywords = {
     'struct' : 'STRUCT',
     'switch':'SWITCH',
     'typedef':'TYPEDEF',
+    'type_name':'TYPE_NAME',
     'union':'UNION',
     'unsigned':'UNSIGNED',
     'void':'VOID',
@@ -105,7 +108,7 @@ literals = [
         # Arithematic Operator
         '-', '+', '*', 
         '/', '%', '=',
-        '>', '<'
+        '>', '<',
 
         # Parenthesis
         '(', ')',
@@ -232,10 +235,14 @@ def find_column(input, token):
     line_start = input.rfind('\n', 0, token.lexpos) + 1
     return (token.lexpos - line_start) + 1
 
+
+# Build the lexer
+lexer = lex.lex(debug = 0)
+
 if __name__ == "__main__":
 
     # Build the lexer
-    lexer = lex.lex(debug = 0)
+    # lexer = lex.lex(debug = 0)
 
     # Calculate column number from lexpos
     # lexer.pos_newline = -1  #FIXME: redundant

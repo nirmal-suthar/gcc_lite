@@ -18,16 +18,20 @@ $ make clean # For removing the build
 
 ### For executing scanner
 ```bash
-$ ./bin/lexer /tests/test1.c
+$ ./bin/lexer /tests/helloworld.c
 ```
 
-### Available option
+### For generating dot file (parser)
+```bash
+$ ./bin/parser /tests/helloworld.c -o myAST.dot
+
+# For generates a postscript program containing the drawing of the tree 
+$ dot -Tps myAST.dot -o myAST.ps 
 ```
-./bin/lexer - token scanner for C programs
-USAGE:  ./bin/lexer [options] file...
- 
-options:
-  -h, --help             shows brief help
-  -o, --output=FILE      specify a file to store output
-  -v, --verbose          force output on stdout
+
+
+### For more informations
+```
+$ ./bin/lexer -h
+$ ./bin/parser -h
 ```
