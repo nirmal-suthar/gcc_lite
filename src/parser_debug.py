@@ -1,15 +1,7 @@
-#!/usr/bin/python3
-
 from ply import yacc
 from lexer import lexer, tokens
 
 # TODO: not needed as ansi C has all ambiguity fixed at grammer level
-
-precedence = (
-    ('nonassoc', 'IFX'),
-    ('nonassoc', 'ELSE'),
-)
-
 # precedence = (
 #     ('left', 'PLUSOP', 'MINUSOP'),
 #     ('left', 'MULTOP', 'DIVOP', 'MODOP'),
@@ -18,6 +10,14 @@ precedence = (
 #     ('left', 'LTCOMP', 'LTECOMP'),
 #     ('left', 'GTCOMP', 'GTECOMP'),
 # )
+
+# parser = yacc.yacc(debug=1)
+
+# input_file = input()
+
+# result = parser.parse(input_file)
+# print(result)
+
 
 # #############################################################################
 # Start, Empty and Error handling             
@@ -30,11 +30,11 @@ def p_start(p):
     pass
 
 
-# def p_empty(p):
-#     """ empty :
-#     """
-#     p[0] = ['empty'] + p[1:]
-#     pass
+def p_empty(p):
+    """ empty :
+    """
+    p[0] = ['empty'] + p[1:]
+    pass
 
 
 def p_error(p):
@@ -247,9 +247,7 @@ def p_declaration(p):
     ''' declaration	: declaration_specifiers ';'
 	        | declaration_specifiers init_declarator_list ';'
     '''
-    p[0] = ['declaration']
-    if len(p)==4:
-        p[0] += p[1:]
+    p[0] = ['declaration'] + p[1:]
     pass
 
 def p_declaration_specifiers(p):
@@ -260,8 +258,7 @@ def p_declaration_specifiers(p):
             | type_qualifier
             | type_qualifier declaration_specifiers
     '''
-    p[0] = ['declaration_specifiers']
-    #  + p[1:]
+    p[0] = ['declaration_specifiers'] + p[1:]
     pass
 
 def p_init_declarator_list(p):
@@ -276,11 +273,9 @@ def p_init_declarator(p):
     ''' init_declarator : declarator
             | declarator '=' initializer
     '''
-    p[0] = ['init_declarator']
-    if len(p) == 4:
-        p[0] += p[1:]
-
+    p[0] = ['init_declarator'] + p[1:]
     pass
+
 
 def p_storage_class_specifier(p):
     ''' storage_class_specifier : TYPEDEF
@@ -306,8 +301,7 @@ def p_type_specifier(p):
             | enum_specifier
             | TYPE_NAME
     '''
-    p[0] = ['type_specifier'] 
-    # + p[1:]
+    p[0] = ['type_specifier'] + p[1:]
     pass
 
 def p_struct_or_union_specifier(p):
@@ -559,7 +553,7 @@ def p_expression_statement(p):
     pass
 
 def p_selection_statement(p):
-    ''' selection_statement : IF '(' expression ')' statement %prec IFX
+    ''' selection_statement : IF '(' expression ')' statement
             | IF '(' expression ')' statement ELSE statement
             | SWITCH '(' expression ')' statement
     '''
@@ -615,4 +609,3 @@ def p_function_definition(p):
 
 # Build the parser
 parser = yacc.yacc(debug=1)
-
