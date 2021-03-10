@@ -24,6 +24,8 @@ int main()
 ```
 
 
-Sample Output of Scanner:
+#### Sample Output of Scanner:
+
+
 ![ ](Mile1_sample_output.png)
 
