@@ -1,8 +1,6 @@
 .vscode/*
 */__pycache__/*
 bin/parser
-bin/lexer
 src/parsetab.py
-*.dot
-*.ps
-*.out
+src/parser.out
+*.{dot,ps,out,png}

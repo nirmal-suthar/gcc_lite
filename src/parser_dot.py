@@ -1,23 +1,6 @@
-import sys
-import pydot
-from parser import parser
-
-# def remove_redundancy(tree):
-#     newList = tree[:1]
-
-#     for child in tree[1:]:
-#         if type(child) is list:
-#             child = remove_redundancy(child)
-#             if child != []:
-#                 newList.append(child)
-#         else:
-#             newList.append(child)
-
-
-#     if len(newList) == 2:
-#         return newList[1]
-    
-#     return newList
+#! /usr/bin/env python3
+import sys, argparse, pydot
+from argparse import ArgumentParser
 
 FILTERED_LIST = [';','{','}']
 
@@ -63,28 +46,74 @@ def generate_dot(graph, tree, node_idx):
         raise Exception('Invalid type {}'.format(type(tree)))
 
 
+def arg_parser():
+
+    argparser = ArgumentParser(prog='gcc_lite', 
+        description='Parser for C programs')
+
+    argparser.add_argument('input', type=str, 
+        help='C program file to parse')
+
+    argparser.add_argument('-v', '--verbose', action="store_true", 
+        help='Force output on stdout')
+
+    argparser.add_argument('-d', '--debug', action="store_true", 
+        help='Generate complete syntax tree for debugging purpose')
+    
+    argparser.add_argument('-o', '--out', type=str, 
+        help='File to store generated DOT file')
+
+    argparser.add_argument('-p', '--png', default='None', type=str,
+        nargs='?', help='Generate graph as png')
+    
+    argparser.add_argument('-s', '--string', type=str,
+        help='C program string to parse')
+
+    args = argparser.parse_args()
+    return args
+
+
 if __name__ == "__main__":
 
-    # FIXME: use argparser instead of script
+    args = arg_parser()
 
-    with open(sys.argv[1], "r") as f:
-        input_file = f.read()
-    syntax_tree = parser.parse(input_file)
+    if args.out is None:
+        ofile = args.input if args.input is not None else "myAST"
+        ofile = ofile.split('/')[-1].split('.')[0]
+        args.out = ofile + '.dot'
+        args.png = ofile + '.png' if args.png == 'None' else args.png
 
-    # print(syntax_tree)
-    # if syntax_tree is None:
-    #     raise Exception('Syntax Error')
+    if args.string is not None:
+        ifile = args.string
+    else:
+        with open(args.input, 'r') as f:
+            ifile = f.read()
 
-    AST_tree = ['start',remove_redundancy(syntax_tree)]
+    
+    if args.debug:
+        from parser_debug import parser
+    else:
+        from parser import parser
 
-    graph = pydot.Dot('gcc_lite: Syntax Tree', graph_type='digraph')
+    syntax_tree = parser.parse(ifile)
+    
+    if args.debug:
+        AST_tree = syntax_tree
+    else:
+        AST_tree = ['start',remove_redundancy(syntax_tree)]
+    
+    graph = pydot.Dot('gcc_lite: Abstract Syntax Tree', graph_type='digraph')
     generate_dot(graph, AST_tree, 0)
     graph.get_node('0')[0].set_shape('doubleoctagon')
     graph.get_node('0')[0].set_color('orange')
     graph.get_node('0')[0].set_style('filled')
    
-    # print(graph.to_string())
+    if args.verbose:
+        print(AST_tree)
+    
+    graph.write_raw(args.out)
+    print('DOT file "{}" generated.'.format(args.out))
 
-    graph.write_raw(sys.argv[2])
-    # graph.write_png("ast.png")
-    # print('Dot file generated at: "{}" '.format(sys.argv[2]))
+    if args.png is not None:
+        graph.write_png(args.png)
+        print("Graph generated {}".format(args.png))
