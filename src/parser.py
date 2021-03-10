@@ -1,23 +1,26 @@
-#!/usr/bin/python3
+#! /usr/bin/env python3
 
 from ply import yacc
 from lexer import lexer, tokens
 
-# TODO: not needed as ansi C has all ambiguity fixed at grammer level
+class bcolors:
+    HEADER = '\033[95m'
+    OKBLUE = '\033[94m'
+    OKCYAN = '\033[96m'
+    OKGREEN = '\033[92m'
+    WARNING = '\033[93m'
+    FAIL = '\033[91m'
+    ENDC = '\033[0m'
+    BOLD = '\033[1m'
+    UNDERLINE = '\033[4m'
 
+
+# Precedence not needed in operator as ansi C has all 
+# ambiguity fixed at grammer level
 precedence = (
     ('nonassoc', 'IFX'),
     ('nonassoc', 'ELSE'),
 )
-
-# precedence = (
-#     ('left', 'PLUSOP', 'MINUSOP'),
-#     ('left', 'MULTOP', 'DIVOP', 'MODOP'),
-#     ('left', 'DECOP', 'INCOP'),
-#     ('left', 'LSHIFT', 'RLIFT'),
-#     ('left', 'LTCOMP', 'LTECOMP'),
-#     ('left', 'GTCOMP', 'GTECOMP'),
-# )
 
 # #############################################################################
 # Start, Empty and Error handling             
@@ -38,11 +41,20 @@ def p_start(p):
 
 
 def p_error(p):
-    # print("Parser state before crash: {}".format(parser.state))
-    print("Error")
-    # t_error(p) 
-    # TODO: Add error function which point lineno,
-    # column no. Can be done by hooking to the lexer attributes.
+    position = (
+        p.lexer.lexpos
+        - sum(map(lambda line: len(line) + 1, p.lexer.lines[: p.lineno - 1]))
+        - len(p.value)
+        + 1
+    )
+    print(bcolors.BOLD+'{}:{}:{}:'.format(p.lexer.filename,p.lineno, position)+bcolors.ENDC,end='')
+    print(bcolors.FAIL+' SyntaxError: '+bcolors.ENDC,'Unexpected token {}'.format(p.value))
+    print('     {} |{}'.format(p.lineno,p.lexer.lines[p.lineno - 1][:position-1]),end='')
+    print(bcolors.WARNING + bcolors.UNDERLINE + '{}'.format(
+        p.lexer.lines[p.lineno - 1][position-1:position-1+len(p.value)]
+        )+bcolors.ENDC+bcolors.ENDC,end='')
+    print('{}'.format(p.lexer.lines[p.lineno - 1][position-1+len(p.value):]))
+
 
 # #############################################################################
 # Expressions            
@@ -755,5 +767,5 @@ def p_function_definition(p):
     p[0] = ['function_definition'] + p[1:]
 
 # Build the parser
-parser = yacc.yacc(debug=1)
+parser = yacc.yacc()
 
