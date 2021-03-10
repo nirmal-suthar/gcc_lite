@@ -25,5 +25,5 @@ int main()
 
 
 Sample Output of Scanner:
-![][Mile1_sample_output]
+![ ][Mile1_sample_output.png]
 
