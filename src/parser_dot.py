@@ -1,4 +1,5 @@
 #! /usr/bin/env python3
+
 import sys, argparse, pydot
 from argparse import ArgumentParser
 
@@ -63,12 +64,9 @@ def arg_parser():
     argparser.add_argument('-o', '--out', type=str, 
         help='File to store generated DOT file')
 
-    argparser.add_argument('-p', '--png', default='None', type=str,
+    argparser.add_argument('-p', '--png', default='myAST.png', type=str,
         nargs='?', help='Generate graph as png')
     
-    argparser.add_argument('-s', '--string', type=str,
-        help='C program string to parse')
-
     args = argparser.parse_args()
     return args
 
@@ -81,22 +79,24 @@ if __name__ == "__main__":
         ofile = args.input if args.input is not None else "myAST"
         ofile = ofile.split('/')[-1].split('.')[0]
         args.out = ofile + '.dot'
-        args.png = ofile + '.png' if args.png == 'None' else args.png
+        args.png = ofile + '.png' if args.png == 'myAST.png' else args.png
 
-    if args.string is not None:
-        ifile = args.string
-    else:
-        with open(args.input, 'r') as f:
-            ifile = f.read()
-
+    with open(args.input, 'r') as f:
+        ifile = f.read()
     
     if args.debug:
-        from parser_debug import parser
+        from parser_debug import parser, lexer
     else:
-        from parser import parser
+        from parser import parser, lexer
+
+    lexer.filename = args.input 
+    lexer.lines = ifile.split("\n")
 
     syntax_tree = parser.parse(ifile)
-    
+
+    if syntax_tree is None:
+        exit(1)
+
     if args.debug:
         AST_tree = syntax_tree
     else:
