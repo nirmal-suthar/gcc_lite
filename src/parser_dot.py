@@ -5,12 +5,14 @@ from parser import parser
 def generate_dot(graph, tree, node_idx):
     """ Node and edge declarations."""
     if type(tree) is str:
-        graph.add_node(pydot.Node(node_idx, label=tree, shape='house', style='filled', color='yellowgreen'))
+        graph.add_node(pydot.Node(node_idx, label=repr(tree), shape='house', style='filled', color='yellowgreen'))
         return node_idx
     elif type(tree) is list:
-        graph.add_node(pydot.Node(node_idx, label=tree[0], shape='egg'))
+        graph.add_node(pydot.Node(node_idx, label=repr(tree[0]), shape='egg'))
         cur_idx = node_idx
         for child in tree[1:]:
+            if child == []:
+                continue
             graph.add_edge(pydot.Edge(node_idx, cur_idx+1))
             cur_idx = generate_dot(graph, child, cur_idx+1)
         return cur_idx
@@ -32,7 +34,8 @@ if __name__ == "__main__":
     graph.get_node('0')[0].set_color('orange')
     graph.get_node('0')[0].set_style('filled')
    
-    print(graph.to_string())
+    # print(graph.to_string())
 
-    # graph.write_raw(sys.argv[2])
+    graph.write_raw(sys.argv[2])
+    # graph.write_png("ast.png")
     # print('Dot file generated at: "{}" '.format(sys.argv[2]))

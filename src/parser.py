@@ -309,7 +309,10 @@ def p_declaration(p):
     ''' declaration	: declaration_specifiers ';'
 	        | declaration_specifiers init_declarator_list ';'
     '''
-    p[0] = ['declaration'] + p[1:]
+    if (len(p) == 3):
+        p[0] = p[1]
+    else:
+        p[0] = p[2]
 
 def p_declaration_specifiers(p):
     ''' declaration_specifiers : storage_class_specifier
@@ -319,20 +322,28 @@ def p_declaration_specifiers(p):
             | type_qualifier
             | type_qualifier declaration_specifiers
     '''
-    p[0] = ['declaration_specifiers'] + p[1:]
+    p[0] = [] # ignore declarations in AST
 
 def p_init_declarator_list(p):
     ''' init_declarator_list : init_declarator
             | init_declarator_list ',' init_declarator
     '''
-    p[0] = ['init_declarator_list'] + p[1:]
+    if (len(p) == 2):
+        p[0] = p[1]
+    elif p[3] == []:
+        p[0] = p[1]
+    else:
+        p[0] = ['init_declarator_list', p[1], p[3]]
 
 
 def p_init_declarator(p):
     ''' init_declarator : declarator
             | declarator '=' initializer
     '''
-    p[0] = ['init_declarator'] + p[1:]
+    if len(p) == 2:
+        p[0] = [] # ignore declarations in AST
+    else:
+        p[0] = ['=', p[1], p[3]]
 
 
 def p_storage_class_specifier(p):
@@ -342,7 +353,7 @@ def p_storage_class_specifier(p):
         | AUTO
         | REGISTER
     '''
-    p[0] = ['storage_class_specifier'] + p[1:]
+    p[0] = p[1]
 
 def p_type_specifier(p):
     ''' type_specifier : VOID
@@ -358,7 +369,7 @@ def p_type_specifier(p):
             | enum_specifier
             | TYPE_NAME
     '''
-    p[0] = ['type_specifier'] + p[1:]
+    p[0] = p[1]
 
 def p_struct_or_union_specifier(p):
     ''' struct_or_union_specifier : struct_or_union IDENTIFIER '{' struct_declaration_list '}'
@@ -377,12 +388,15 @@ def p_struct_declaration_list(p):
     ''' struct_declaration_list : struct_declaration
             | struct_declaration_list struct_declaration
     '''
-    p[0] = ['struct_declaration_list'] + p[1:]
+    if len(p) == 2:
+        p[0] = p[1]
+    else:
+        p[0] = ['struct_declaration_list'] + p[1:]
 
 def p_struct_declaration(p):
     ''' struct_declaration : specifier_qualifier_list struct_declarator_list ';'
     '''
-    p[0] = ['struct_declaration'] + p[1:]
+    p[0] = ['struct_declaration'] + p[1:-1]
 
 def p_specifier_qualifier_list(p):
     ''' specifier_qualifier_list : type_specifier specifier_qualifier_list
@@ -390,20 +404,29 @@ def p_specifier_qualifier_list(p):
             | type_qualifier specifier_qualifier_list
             | type_qualifier
     '''
-    p[0] = ['specifier_qualifier_list'] + p[1:]
+    if len(p) == 2:
+        p[0] = p[1]
+    else:
+        p[0] = ['specifier_qualifier_list'] + p[1:]
 
 def p_struct_declarator_list(p):
     ''' struct_declarator_list : struct_declarator
             | struct_declarator_list ',' struct_declarator
     '''
-    p[0] = ['struct_declarator_list'] + p[1:]
+    if len(p) == 2:
+        p[0] = p[1]
+    else:
+        p[0] = [p[2], p[1], p[3]]
 
 def p_struct_declarator(p):
     ''' struct_declarator : declarator
             | ':' constant_expression
             | declarator ':' constant_expression
     '''
-    p[0] = ['struct_declarator'] + p[1:]
+    if len(p) == 2:
+        p[0] = p[1]
+    else:
+        p[0] = ['struct_declarator'] + p[1:]
 
 def p_enum_specifier(p):
     ''' enum_specifier : ENUM '{' enumerator_list '}'
@@ -416,36 +439,62 @@ def p_enumerator_list(p):
     ''' enumerator_list : enumerator
             | enumerator_list ',' enumerator
     '''
-    p[0] = ['enumerator_list'] + p[1:]
+    if len(p) == 2:
+        p[0] = p[1]
+    else:
+        p[0] = [p[2], p[1], p[3]]
 
 def p_enumerator(p):
     ''' enumerator : IDENTIFIER
             | IDENTIFIER '=' constant_expression
     '''
-    p[0] = ['enumerator'] + p[1:]
+    if len(p) == 2:
+        p[0] = p[1]
+    else:
+        p[0] = ['=', p[1], p[3]]
 
 def p_type_qualifier(p):
     ''' type_qualifier : CONST
             | VOLATILE
     '''
-    p[0] = ['type_qualifier'] + p[1:]
+    p[0] = p[1]
 
 def p_declarator(p):
     ''' declarator : pointer direct_declarator
             | direct_declarator
     '''
-    p[0] = ['declarator'] + p[1:]
+    if len(p) == 2:
+        p[0] = p[1]
+    else:
+        p[0] = ['declarator', p[1], p[2]]
 
-def p_direct_declarator(p):
+def p_direct_declarator_id(p):
     ''' direct_declarator : IDENTIFIER
             | '(' declarator ')'
-            | direct_declarator '[' constant_expression ']'
+    '''
+    if len(p) == 2:
+        p[0] = p[1]
+    else:
+        p[0] = p[2]
+
+def p_direct_declarator_array(p):
+    ''' direct_declarator : direct_declarator '[' constant_expression ']'
             | direct_declarator '[' ']'
-            | direct_declarator '(' parameter_type_list ')'
+    '''
+    if len(p) == 4:
+        p[0] = ['[]', p[1]]
+    else:
+        p[0] = ['[]', p[1], p[3]]
+
+def p_direct_declarator_function(p):
+    ''' direct_declarator : direct_declarator '(' parameter_type_list ')'
             | direct_declarator '(' identifier_list ')'
             | direct_declarator '(' ')'
     '''
-    p[0] = ['direct_declarator'] + p[1:]
+    if len(p) == 4:
+        p[0] = ['()', p[1]]
+    else:
+        p[0] = ['()', p[1], p[3]]
 
 def p_pointer(p):
     ''' pointer : '*'
@@ -459,45 +508,66 @@ def p_type_qualifier_list(p):
     ''' type_qualifier_list : type_qualifier
             | type_qualifier_list type_qualifier
     '''
-    p[0] = ['type_qualifier_list'] + p[1:]
+    if len(p) == 2:
+        p[0] = p[1]
+    else:
+        p[0] = ['type_qualifier_list'] + p[1:]
 
 def p_parameter_type_list(p):
     ''' parameter_type_list : parameter_list
             | parameter_list ',' ELLIPSIS
     '''
-    p[0] = ['parameter_type_list'] + p[1:]
+    if len(p) == 2:
+        p[0] = p[1]
+    else:
+        p[0] = [p[2], p[1], p[3]]
 
 def p_parameter_list(p):
     ''' parameter_list : parameter_declaration
             | parameter_list ',' parameter_declaration
     '''
-    p[0] = ['parameter_list'] + p[1:]
+    if len(p) == 2:
+        p[0] = p[1]
+    else:
+        p[0] = [p[2], p[1], p[3]]
 
 def p_parameter_declaration(p):
     ''' parameter_declaration : declaration_specifiers declarator
             | declaration_specifiers abstract_declarator
             | declaration_specifiers
     '''
-    p[0] = ['parameter_declaration'] + p[1:]
+    if len(p) == 2:
+        p[0] = p[1]
+    else:
+        p[0] = ['parameter_declaration'] + p[1:]
 
 def p_identifier_list(p):
     ''' identifier_list : IDENTIFIER
             | identifier_list ',' IDENTIFIER
     '''
-    p[0] = ['identifier_list'] + p[1:]
+    if len(p) == 2:
+        p[0] = p[1]
+    else:
+        p[0] = [p[2], p[1], p[3]]
 
 def p_type_name(p):
     ''' type_name : specifier_qualifier_list
             | specifier_qualifier_list abstract_declarator
     '''
-    p[0] = ['type_name'] + p[1:]
+    if len(p) == 2:
+        p[0] = p[1]
+    else:
+        p[0] = ['type_name'] + p[1:]
 
 def p_abstract_declarator(p):
     ''' abstract_declarator : pointer
             | direct_abstract_declarator
             | pointer direct_abstract_declarator
     '''
-    p[0] = ['abstract_declarator'] + p[1:]
+    if len(p) == 2:
+        p[0] = p[1]
+    else:
+        p[0] = ['abstract_declarator'] + p[1:]
 
 def p_direct_abstract_declarator(p):
     ''' direct_abstract_declarator : '(' abstract_declarator ')'
@@ -569,49 +639,83 @@ def p_compound_statement(p):
             | '{' declaration_list '}'
             | '{' declaration_list statement_list '}'
     '''
-    p[0] = ['compound_statement'] + p[1:]
+    p[0] = ['compound_statement'] + ['{'] + p[2:-1] + ['}']
 
 def p_declaration_list(p):
     ''' declaration_list : declaration
             | declaration_list declaration
     '''
-    p[0] = ['declaration_list'] + p[1:]
+    if len(p) == 2:
+        p[0] = p[1]
+    else:
+        p[0] = ['declaration_list'] + p[1:]
 
 def p_statement_list(p):
     ''' statement_list : statement
             | statement_list statement
     '''
-    p[0] = ['statement_list'] + p[1:]
+    if len(p) == 2:
+        p[0] = p[1]
+    else:
+        p[0] = ['statement_list'] + p[1:]
 
 def p_expression_statement(p):
     ''' expression_statement : ';'
 	        | expression ';'
     '''
-    p[0] = ['expression_statement'] + p[1:]
+    p[0] = p[1] # node with label ';' is skip statement (empty expression)
 
-def p_selection_statement(p):
+def p_selection_statement_if(p):
     ''' selection_statement : IF '(' expression ')' statement
             | IF '(' expression ')' statement ELSE statement
-            | SWITCH '(' expression ')' statement
     '''
-    p[0] = ['selection_statement'] + p[1:]
+    if len(p) == 6:
+        p[0] = ['IF', p[3], p[5]]
+    else:
+        p[0] = ['IF_ELSE', p[3], p[5], p[7]]
 
-def p_iteration_statement(p):
+def p_selection_statement_switch(p):
+    ''' selection_statement : SWITCH '(' expression ')' statement'''
+    p[0] = ['SWITCH', p[3], p[5]]
+
+def p_iteration_statement_while(p):
     ''' iteration_statement : WHILE '(' expression ')' statement
             | DO statement WHILE '(' expression ')' ';'
-            | FOR '(' expression_statement expression_statement ')' statement
+    '''
+    if len(p) == 6:
+        p[0] = ['WHILE', p[3], p[5]]
+    else:
+        p[0] = ['DO_WHILE', p[2], p[5]]
+
+def p_iteration_statement_for(p):
+    ''' iteration_statement : FOR '(' expression_statement expression_statement ')' statement
             | FOR '(' expression_statement expression_statement expression ')' statement
     '''
-    p[0] = ['iteration_statement'] + p[1:]
+    if len(p) == 7:
+        p[0] = ['FOR', p[3], p[4], p[6]]
+    else:
+        p[0] = ['FOR', p[3], p[4], p[5], p[7]]
 
-def p_jump_statement(p):
-    ''' jump_statement : GOTO IDENTIFIER ';'
-            | CONTINUE ';'
-            | BREAK ';'
-            | RETURN ';'
+def p_jump_statement_goto(p):
+    ''' jump_statement : GOTO IDENTIFIER ';' '''
+    p[0] = ['GOTO', p[2]]
+
+def p_jump_statement_continue(p):
+    ''' jump_statement : CONTINUE ';' '''
+    p[0] = ['CONTINUE']
+
+def p_jump_statement_break(p):
+    ''' jump_statement : BREAK ';' '''
+    p[0] = ['BREAK']
+
+def p_jump_statement_return(p):
+    ''' jump_statement : RETURN ';'
             | RETURN expression ';'
     '''
-    p[0] = ['jump_statement'] + p[1:]
+    if len(p) == 3:
+        p[0] = ['RETURN']
+    else:
+        p[0] = ['RETURN', p[2]]
 
 # #############################################################################
 # External declaration and function definitions            
@@ -621,14 +725,17 @@ def p_translation_unit(p):
     ''' translation_unit : external_declaration
 	        | translation_unit external_declaration
     '''
-    p[0] = ['translation_unit'] + p[1:]
+    if len(p) == 2:
+        p[0] = p[1]
+    else:
+        p[0] = ['translation_unit'] + p[1:]
 
 
 def p_external_declaration(p):
     ''' external_declaration : function_definition
 	        | declaration
     '''
-    p[0] = ['external_declaration'] + p[1:]
+    p[0] = p[1]
 
 def p_function_definition(p):
     ''' function_definition : declaration_specifiers declarator declaration_list compound_statement
