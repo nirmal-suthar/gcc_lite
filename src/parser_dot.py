@@ -64,8 +64,8 @@ def arg_parser():
     argparser.add_argument('-o', '--out', type=str, 
         help='File to store generated DOT file')
 
-    argparser.add_argument('-p', '--png', default='myAST.png', type=str,
-        nargs='?', help='Generate graph as png')
+    argparser.add_argument('-p', '--png', action="store_true",
+         help='Generate graph as png')
     
     args = argparser.parse_args()
     return args
@@ -79,7 +79,8 @@ if __name__ == "__main__":
         ofile = args.input if args.input is not None else "myAST"
         ofile = ofile.split('/')[-1].split('.')[0]
         args.out = ofile + '.dot'
-        args.png = ofile + '.png' if args.png == 'myAST.png' else args.png
+    
+    png_file = args.out.split('.')[-2] + '.png'
 
     with open(args.input, 'r') as f:
         ifile = f.read()
@@ -114,6 +115,6 @@ if __name__ == "__main__":
     graph.write_raw(args.out)
     print('DOT file "{}" generated.'.format(args.out))
 
-    if args.png is not None:
-        graph.write_png(args.png)
-        print("Graph generated {}".format(args.png))
+    if args.png:
+        graph.write_png(png_file)
+        print("Graph generated {}".format(png_file))

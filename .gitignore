@@ -3,4 +3,7 @@
 bin/parser
 src/parsetab.py
 src/parser.out
-*.{dot,ps,out,png}
+*.png
+*.dot
+*.ps
+*.out

@@ -3,6 +3,8 @@ int main()
   int a = 5, *a_p = &a;
 
   int *a_pold = a_p;
+  int b = 10, *b_p = &b, **b_pp = &b_p;
+  int c = 10;
   
   a_p++;
   a_p--;
@@ -38,10 +40,8 @@ int main()
   
   if( a - *a_p != 0) return 7;
 
-  int b = 10, *b_p = &b, **b_pp = &b_p;
   if (b - **b_pp != 0) return 8;
   
-  int c = 10;
   if ( c - *&c != 0 ) return 9;
 
   return 0;
