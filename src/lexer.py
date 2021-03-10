@@ -22,7 +22,6 @@ keywords = {
     'for':'FOR',
     'goto':'GOTO',
     'if':'IF',
-    'inline':'INLINE',
     'int':'INT',
     'long':'LONG',
     'register':'REGISTER',
@@ -40,17 +39,6 @@ keywords = {
     'void':'VOID',
     'volatile':'VOLATILE',
     'while':'WHILE',
-    '_Alignas':'ALIGNAS',
-    '_Alignof':'ALIGNOF',
-    '_Atomic':'ATOMIC',
-    '_Bool':'BOOL',
-    '_Complex':'COMPLEX',
-    '_Generic':'GENERIC',
-    '_Imaginary':'IMAGINARY',
-    '_Noreturn':'NORETURN',
-    '_Static_assert':'STATIC_ASSERT',
-    '_Thread_local':'THREAD_LOCAL',
-    '__func__':'FUNC_NAME',
 }
 
 # List of token names. 
