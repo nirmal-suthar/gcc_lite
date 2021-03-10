@@ -728,7 +728,10 @@ def p_translation_unit(p):
     if len(p) == 2:
         p[0] = p[1]
     else:
-        p[0] = ['translation_unit'] + p[1:]
+        if p[1] == []:
+            p[0] = p[2]
+        else:
+            p[0] = ['translation_unit'] + p[1:]
 
 
 def p_external_declaration(p):
