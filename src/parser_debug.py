@@ -564,7 +564,7 @@ def p_expression_statement(p):
     pass
 
 def p_selection_statement(p):
-    ''' selection_statement : IF '(' expression ')' statement
+    ''' selection_statement : IF '(' expression ')' statement %prec IFX
             | IF '(' expression ')' statement ELSE statement
             | SWITCH '(' expression ')' statement
     '''

@@ -1,3 +1,4 @@
+SHELL=/usr/bin/bash
 PYTHON=python3
 SRC=./src
 BIN=./bin
