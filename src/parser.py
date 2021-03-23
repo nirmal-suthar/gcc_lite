@@ -2,6 +2,7 @@
 
 from ply import yacc
 from lexer import lexer, tokens
+from classes import SymbolTable, Node
 
 class bcolors:
     HEADER = '\033[95m'
@@ -21,6 +22,47 @@ precedence = (
     ('nonassoc', 'IFX'),
     ('nonassoc', 'ELSE'),
 )
+
+
+operator_type={}
+operator_type["+"]=["int","float","char"]
+operator_type["-"]=operator_type["+"]
+operator_type["*"]=operator_type["+"]
+operator_type["/"]=operator_type["+"]
+operator_type["%"]=["int"]
+
+operator_type[">"]=["int","float","char"]
+operator_type[">="]=operator_type[">"]
+operator_type["<"]=operator_type[">"]
+operator_type["<="]=operator_type[">"]
+operator_type["||"]=operator_type[">"]
+operator_type["&&"]=operator_type[">"]
+operator_type["!"]=operator_type[">"]
+
+
+operator_type["<<"]=["int"]
+operator_type[">>"]=operator_type["<<"]
+operator_type["|"]=["<<"]
+operator_type["&"]=operator_type["|"]
+operator_type["~"]=operator_type["|"]
+operator_type["^"]=operator_type["|"]
+
+types={}
+types["float"]=["int","long long int", "long int" ,"float","char" ]
+types["int"]=["float", "char","int"]
+types["char"]=["int", "char"]
+types["pointer"]=["int","float"]
+
+# #############################################################################
+# Helper Functions for semantic analysis      
+# #############################################################################
+
+def assigner(p,x):
+    if isinstance(p[x].data,str):
+        return p[x].data
+    else:
+        return p[x].data.copy()
+
 
 # #############################################################################
 # Start, Empty and Error handling             
@@ -188,14 +230,47 @@ def p_inclusive_or_expression(p):
     ''' inclusive_or_expression : exclusive_or_expression
             | inclusive_or_expression '|' exclusive_or_expression
     '''
-    p[0] = ['inclusive_or_expression'] + p[1:]
+    # p[0] = ['inclusive_or_expression'] + p[1:]
+    p[0] = Node()
+    p[0].parse = ['logical_or_expression'] + p[1:]
+
+    if len(p)==2:
+        p[0].data = assign(p,1)
+        p[0].placeList[0] = p[1].placeList[0]
+        p[0].code = p[1].code 
+    
+    if len(p)==4:
+        allowed_type = operator_type["||"]
+        if not (p[1].data["type"] in allowed_type and p[3].data["type"] in allowed_type):
+            print("Type not consistent for OR exp at lineno " + str(p.lineno(0)))
+            exit()
+
+        p[0].data = { "type" : "int" }
+        #placelist n code part to be assigned
     pass
 
 def p_logical_and_expression(p):
     ''' logical_and_expression : inclusive_or_expression
             | logical_and_expression AND_OP inclusive_or_expression
     '''
-    p[0] = ['logical_and_expression'] + p[1:]
+    # p[0] = ['logical_and_expression'] + p[1:]
+    p[0] = Node()
+    p[0].parse = ['logical_and_expression'] + p[1:]
+
+    if len(p)==2:
+        p[0].data = assign(p,1)
+        p[0].placeList[0] = p[1].placeList[0]
+        p[0].code = p[1].code 
+
+    if len(p)==4:
+        allowed_type = operator_type["&&"]
+        if not (p[1].data["type"] in allowed_type and p[3].data["type"] in allowed_type):
+            print("Type not consistent for AND exp at lineno " + str(p.lineno(0)))
+            exit()
+
+        p[0].data = { "type" : "int" } 
+        #placelist n code part to be assigned
+
     pass
 
 def p_logical_or_expression(p):
@@ -209,7 +284,24 @@ def p_conditional_expression(p):
     ''' conditional_expression : logical_or_expression
             | logical_or_expression '?' expression ':' conditional_expression
     '''
-    p[0] = ['conditional_expression'] + p[1:]
+    # p[0] = ['conditional_expression'] + p[1:]
+    p[0] = Node()
+    p[0].parse = ['conditional_expression'] + p[1:]
+    if len(p) == 2:
+        p[0].data = assign(p,1)
+        p[0].placeList[0] = p[1].placeList[0]
+        p[0].code = p[1].code 
+    else:
+        allowed_type = operator_type["||"]
+        if p[1].data["type"] not in allowed_type:
+            print("Expected integer, char or float, found something else at lineno " + str(p.lineno(0)))
+            exit()
+        if p[3].data["type"] != p[5].data["type"]:
+            print("Type not consistent at lineno " + str(p.lineno(0)))
+            exit()
+        p[0].data = { "type" : p[3].data["type"] }
+        #placelist n code part to be assigned
+
     pass
 
 
