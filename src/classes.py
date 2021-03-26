@@ -4,12 +4,18 @@ class SymbolTable:
         self.table = {}
         self.parent = parent
         self.type_ = type_
+        self.typeDefs = {} # this is a dictionary of dictionary, in which each type name is key
+                           # for each key, all the declarations are key in the new dict, with type, size tuple
+                           # In this dictionary we will also store the total size
         self.metadata = {}
         self.metadata['name'] = 'global'
 
     def lookUp(self, id):
         return (id in self.table)
     
+    def lookUpType(self,id):
+        return (id in self.typeDefs)
+
     def delete(self, name):
         (self.table).pop(name, None)
 
@@ -58,3 +64,122 @@ class Node:
         self.extra = {}
         self.parse
 
+
+class SymbolTableHelper:
+    def __init__(self):
+        self.varCount = 0
+        self.labelCount = 0
+        self.scope = 0
+        self.scopeStack = []
+        self.offsetStack = []
+        self.symbolTables = []
+        self.lastScope = 0
+
+
+    def newVar(self, type_, size_):
+        var = 't' + str(self.varCount)
+        self.symbolTables[self.getScope()].insert(var, type_)
+        self.symbolTables[self.getScope()].update(var, 'size', size_)
+        self.symbolTables[self.getScope()].update(var, 'offset', self.getOffset())
+        self.updateOffset(size_)
+        self.varCount += 1
+        return var
+
+    def newLabel(self):
+        if (self.labelCount == 0): # just to make 3AC pretty!
+            label = 'Program Start'
+        else:
+            label = 'label' + str(self.labelCount)
+        self.labelCount += 1
+        return label
+
+    def newOffset(self):
+        self.offsetStack.append(0)
+        return
+
+    def getOffset(self):
+        return self.offsetStack[-1]
+
+    def popOffset(self):
+        return self.offsetStack.pop()
+
+    def updateOffset(self, size):
+        self.offsetStack[-1] += size
+
+    def newScope(self, parent=None):
+        newTable = SymbolTable(parent)
+        newTable.updateMetadata('scopeNo', self.scope)
+        self.symbolTables.append(newTable)
+        self.scopeStack.append(self.scope)
+        self.newOffset()
+        self.scope += 1
+
+    def getScope(self):
+        return self.scopeStack[-1]
+
+    def endScope(self):
+        self.lastScope = self.scopeStack.pop()
+        self.popOffset()
+
+    def checkId(self,identifier, type_='default'):
+        if type_ == 'global':
+            if self.symbolTables[0].lookUp(identifier) is True:
+                return True
+            return False
+        
+        if type_ == "current":
+            if self.symbolTables[self.getScope()].lookUp(identifier) is True:
+                return True
+            return False
+
+        # Default case
+        for scope in self.scopeStack[::-1]:
+            if self.symbolTables[scope].lookUp(identifier) is True:
+                return True
+        return False
+
+    def checkType(self, identifier, type_='default'):
+        if type_ == 'global':
+            if self.symbolTables[0].lookUpType(identifier) is True:
+                return True
+            return False
+        
+        if type_ == 'current':
+            if self.symbolTables[self.getScope()].lookUpType(identifier) is True:
+                return True
+            return False
+
+        # Default case
+        for scope in self.scopeStack[::-1]:
+            if self.symbolTables[scope].lookUpType(identifier) is True:
+                return True
+        return False
+
+    def findInfo(self, identifier, type_='default'):
+        if type_ == 'global':
+            if self.symbolTables[0].getArg(identifier) is not None:
+                return self.symbolTables[0].getArg(identifier)
+        
+        else:
+            for scope in self.scopeStack[::-1]:
+                if self.symbolTables[scope].getArg(identifier) is not None:
+                    return self.symbolTables[scope].getArg(identifier)
+
+            for scope in self.scopeStack[::-1]:
+                if self.symbolTables[scope].typeDefs.getArg(identifier) is not None:
+                    return self.symbolTables[scope].typeDefs.getArg(identifier)
+        return None
+
+    def findScope(self, identifier):
+        for scope in self.scopeStack[::-1]:
+                if self.symbolTables[scope].getArg(identifier) is not None:
+                    return scope
+
+    def getNearest(self, type_):
+        # return nearest parent scope with name = type_(func, for), -1 if no such scope exist
+        for scope in self.scopeStack[::-1]:
+            if self.symbolTables[scope].metadata['name'] == type_:
+                return scope
+        return -1
+
+   
