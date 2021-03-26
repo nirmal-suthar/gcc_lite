@@ -120,6 +120,7 @@ def p_primary_expression(p):
     p[0] = ['primary_expression'] + p[1:]
     pass
 
+#isme grammar bada karna hoga bahut. bahut chod h isme
 def p_postfix_expression(p):
     ''' postfix_expression : primary_expression
             | postfix_expression '[' expression ']'
@@ -140,6 +141,7 @@ def p_argument_expression_list(p):
     p[0] = ['argument_expression_list'] + p[1:]
     pass
 
+#isko do me divide
 def p_unary_expression(p):
     ''' unary_expression : postfix_expression
             | INC_OP unary_expression
@@ -151,6 +153,7 @@ def p_unary_expression(p):
     p[0] = ['unary_expression'] + p[1:]
     pass
 
+#ye same h
 def p_unary_operator(p):
     ''' unary_operator : '&'
             | '*'
@@ -159,41 +162,92 @@ def p_unary_operator(p):
             | '~'
             | '!'
     '''
-    p[0] = ['unary_operator'] + p[1:]
+    p[0] = Node()
+    p[0].parse = ['unary_operator'] + p[1:]
+    p[0].data = assign(p,1)
     pass
 
+#ye same h
 def p_cast_expression(p):
     ''' cast_expression : unary_expression
             | '(' type_name ')' cast_expression
     '''
-    p[0] = ['cast_expression'] + p[1:]
+    p[0] = Node()
+    p[0].parse = ['cast_expression'] + p[1:]
+
+    if len(p)==2 :
+        p[0].data = assigner(p,1)
+        p[0].code = p[1].code
+
+    if len(p)==5:
+        rex = r'\|p*a+$'
+        x= re.fullmatch(rex, p[2].data["type"])
+        if x!=None or not allowed_type(p[4].data["type"], p[2].data["type"]):
+            print("Type casting not allowed " + str(p.lineno(0)))
+        
+        p[0].data = {}
+        p[0].data["type"]=p[2].data["type"]
+
     pass
 
+#ye same h
 def p_multiplicative_expression(p):
     ''' multiplicative_expression : cast_expression
             | multiplicative_expression '*' cast_expression
             | multiplicative_expression '/' cast_expression
             | multiplicative_expression '%' cast_expression
     '''
-    p[0] = ['multiplicative_expression'] + p[1:]
+    p[0] = Node()
+    p[0].parse = ['multiplicative_expression'] + p[1:]
+    p[0].placeList[1] = p[1].placeList[1]
+
+    if len(p)==2:
+        p[0].data = assign(p,1)
+        p[0].place = p[1].place
+        p[0].code = p[1].code
+
+
     pass
 
+#ye same h
 def p_additive_expression(p):
     ''' additive_expression : multiplicative_expression
             | additive_expression '+' multiplicative_expression
             | additive_expression '-' multiplicative_expression
     '''
-    p[0] = ['additive_expression'] + p[1:]
+    p[0] = Node()
+    p[0].parse = ['additive_expression'] + p[1:]
+    if len(p)==2:
+        p[0].data = assigner(p,1)
+        p[0].code = p[1].code
+
+    if len(p)==4:
+        allowed_type = ["int", "char", "float"]
+        if p[1].data["type"] not in allowed_type or p[3].data["type"] not in allowed_type:
+            print("Type not compatible with +/- at lineno " + str(p.lineno(0)))
     pass
 
+#ye same h
 def p_shift_expression(p):
     ''' shift_expression : additive_expression
             | shift_expression LEFT_OP additive_expression
             | shift_expression RIGHT_OP additive_expression
     '''
-    p[0] = ['shift_expression'] + p[1:]
+    p[0] = Node()
+    p[0].parse = ['shift_expression'] + p[1:]
+
+    if len(p) == 2:
+        p[0].data = assign(p,1)
+        p[0].code = p[1].code
+    
+    if len(p)==4:
+        allowed_type = ["int"]
+        if not(p[1].data["type"] in allowed_type and p[3].data["type"] in allowed_type):
+            print(" Type not compatible with bitwise shift operation at lineno "+p.lineno(0))
+        p[0].data = {"type" : "int"}
     pass
 
+# ye same h
 def p_relational_expression(p):
     ''' relational_expression : shift_expression
             | relational_expression '<' shift_expression
@@ -201,9 +255,22 @@ def p_relational_expression(p):
             | relational_expression LE_OP shift_expression
             | relational_expression GE_OP shift_expression
     '''
-    p[0] = ['relational_expression'] + p[1:]
+    p[0] = Node()
+    p[0].parse = ['relational_expression'] + p[1:]
+
+    if len(p) == 2:
+        p[0].data = assign(p,1)
+        p[0].code = p[1].code
+    
+    if len(p)==4:
+        allowed_type = ["int", "char", "float"]
+        if not(p[1].data["type"] in allowed_type and p[3].data["type"] in allowed_type):
+            print(" Type not compatible with relational operation at lineno "+p.lineno(0))
+        p[0].data = {"type" : "int"}
+
     pass
 
+#ye same h
 def p_equality_expression(p):
     ''' equality_expression : relational_expression
             | equality_expression EQ_OP relational_expression
@@ -212,6 +279,7 @@ def p_equality_expression(p):
     p[0] = ['equality_expression'] + p[1:]
     pass
 
+#ye same h
 def p_and_expression(p):
     ''' and_expression : equality_expression
             | and_expression '&' equality_expression
@@ -219,6 +287,7 @@ def p_and_expression(p):
     p[0] = ['and_expression'] + p[1:]
     pass
 
+#ye same h
 def p_exclusive_or_expression(p):
     ''' exclusive_or_expression : and_expression
             | exclusive_or_expression '^' and_expression
@@ -226,6 +295,7 @@ def p_exclusive_or_expression(p):
     p[0] = ['exclusive_or_expression'] + p[1:]
     pass
 
+#ye same h
 def p_inclusive_or_expression(p):
     ''' inclusive_or_expression : exclusive_or_expression
             | inclusive_or_expression '|' exclusive_or_expression
@@ -249,6 +319,7 @@ def p_inclusive_or_expression(p):
         #placelist n code part to be assigned
     pass
 
+#ye same
 def p_logical_and_expression(p):
     ''' logical_and_expression : inclusive_or_expression
             | logical_and_expression AND_OP inclusive_or_expression
@@ -269,7 +340,6 @@ def p_logical_and_expression(p):
             exit()
 
         p[0].data = { "type" : "int" } 
-        #placelist n code part to be assigned
 
     pass
 
@@ -277,9 +347,24 @@ def p_logical_or_expression(p):
     ''' logical_or_expression : logical_and_expression
             | logical_or_expression OR_OP logical_and_expression
     '''
-    p[0] = ['logical_or_expression'] + p[1:]
+    p[0] = Node()
+    p[0].parse = ['logical_or_expression'] + p[1:]
+
+    if len(p)==2:
+        p[0].data = assign(p,1)
+        p[0].placeList[0] = p[1].placeList[0]
+        p[0].code = p[1].code 
+
+    if len(p)==4:
+        allowed_type = operator_type["||"]
+        if not (p[1].data["type"] in allowed_type and p[3].data["type"] in allowed_type):
+            print("Type not consistent for AND exp at lineno " + str(p.lineno(0)))
+            exit()
+        
+
     pass
 
+#ye same h
 def p_conditional_expression(p):
     ''' conditional_expression : logical_or_expression
             | logical_or_expression '?' expression ':' conditional_expression
@@ -304,14 +389,26 @@ def p_conditional_expression(p):
 
     pass
 
-
+#same h
 def p_assignment_expression(p):
     ''' assignment_expression : conditional_expression
             | unary_expression assignment_operator assignment_expression
     '''
-    p[0] = ['assignment_expression'] + p[1:]
+    p[0] = Node()
+    p[0].parse = ['assignment_expression'] + p[1:]
+    p[0].placeList[1] = p[1].placeList[1]
+
+    temp = p[1].placeList[1] if p[1].placeList[1] != None else  p[1].placeList[0]
+
+    if len(p)==2:
+        p[0].data = assigner(p,1)
+        p[0].placeList[0] = p[1].placeList[0]
+        p[0].code = p[1].code.copy() 
+    else:
+
     pass
 
+#same h
 def p_assignment_operator(p):
     ''' assignment_operator : '='
             | MUL_ASSIGN
@@ -325,14 +422,24 @@ def p_assignment_operator(p):
             | XOR_ASSIGN
             | OR_ASSIGN
     '''
-    p[0] = ['assignment_operator'] + p[1:]
+    p[0] = Node()
+    p[0].parse = ['assignment_operator'] + p[1:]
+    p[0].data = p[1].data
     pass
 
+#same h
 def p_expression(p):
     ''' expression : assignment_expression
             | expression ',' assignment_expression
     '''
-    p[0] = ['expression'] + p[1:]
+    p[0] = Node() 
+    p[0].parse=['expression'] + p[1:]
+    p[0].code = p[1].code.copy()
+    if len(p)==2:
+        p[0].data = {}
+    else:
+        p[0].data = assigner(p,1)
+
     pass
 
 def p_constant_expression(p):
@@ -693,6 +800,7 @@ def p_jump_statement(p):
 # External declaration and function definitions            
 # #############################################################################
 
+#aasis me h, imse dec_seq bnaay h usne
 def p_translation_unit(p):
     ''' translation_unit : external_declaration
 	        | translation_unit external_declaration
