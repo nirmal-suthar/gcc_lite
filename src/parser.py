@@ -2,7 +2,7 @@
 
 from ply import yacc
 from lexer import lexer, tokens
-from classes import SymbolTable, Node
+from classes import *
 
 class bcolors:
     HEADER = '\033[95m'
@@ -53,11 +53,74 @@ types["int"]=["float", "char","int"]
 types["char"]=["int", "char"]
 types["pointer"]=["int","float"]
 
+
+# declarations
+helper = SymbolTableHelper()
+helper.newScope()
+
+# --------------------------------------
+#     SNIPPETS FOR ERROR CHECKINGS
+# --------------------------------------
+#  if helper.checkId(p[1],'current') or (p[1] in p[2].identList):
+#         compilation_errors.add("Redeclaration Error", line_number.get()+1,\
+#             "%s already declared"%p[1])
+# if helper.checkType(p[1],'current'):
+#         compilation_errors.add("Redeclaration Error", line_number.get()+1,\
+#             "Type %s already declared"%p[1])
+# if not helper.checkId(p[1],'default'):
+#         compilation_errors.add('NameError', line_number.get()+1, '%s not declared'%p[1])
+#  scope_ = helper.getNearest('func')
+#     if scope_ == -1:
+#         compilation_errors.add('Scope Error', line_number.get()+1, 'return is not in a function')
+#         return
+
+
+def allowed_type(converted_from,converted_to):
+    global allowed_types
+    if converted_from==converted_to:
+        return True
+    if "|" in converted_from or "|" in converted_to:
+        if "|" in converted_from and converted_from[-1]=='p' and (converted_to[-1]=="p" or converted_to in allowed_types["pointer"]):
+            return True
+        return False
+    if converted_to not in allowed_types.keys():
+        return False
+    return (converted_from in allowed_types[converted_to])
+
+def op_allowed(op, typ):
+    global operator_allowed
+    if op not in operator_allowed.keys():
+        return True
+    return typ in operator_allowed[op]
+
+def cast_string(place, converted_from,converted_to,t=None):
+    
+    if converted_from==converted_to:
+        return {"place":place,"code":[]}
+    if allowed_type(converted_from,converted_to)==True:
+        if t==None:
+            t=helper.newVar(type1_ = converted_to)
+        return {"place":t,"code":[ t +" = " + converted_from+"_to_"+converted_to+"("+place+")" ]}
+    return False
+
+def phelper(p):
+    p_name = sys._getframe(1).f_code.co_name
+    global helper
+    helper.varCount+=1
+    out = (p_name[2:],cnt)
+    for each in range(len(p)-1):
+        if( not isinstance(p[each + 1], OBJ) ):
+            helper.varCount+=1
+            token = p[each + 1]
+            p[each + 1] = Node()
+            p[each + 1].data = token
+            p[each + 1].parse = (token, cnt) 
+
 # #############################################################################
 # Helper Functions for semantic analysis      
 # #############################################################################
 
-def assigner(p,x):
+def assign(p,x):
     if isinstance(p[x].data,str):
         return p[x].data
     else:
@@ -176,7 +239,7 @@ def p_cast_expression(p):
     p[0].parse = ['cast_expression'] + p[1:]
 
     if len(p)==2 :
-        p[0].data = assigner(p,1)
+        p[0].data = assign(p,1)
         p[0].code = p[1].code
 
     if len(p)==5:
@@ -218,7 +281,7 @@ def p_additive_expression(p):
     p[0] = Node()
     p[0].parse = ['additive_expression'] + p[1:]
     if len(p)==2:
-        p[0].data = assigner(p,1)
+        p[0].data = assign(p,1)
         p[0].code = p[1].code
 
     if len(p)==4:
@@ -316,7 +379,7 @@ def p_inclusive_or_expression(p):
             exit()
 
         p[0].data = { "type" : "int" }
-        #placelist n code part to be assigned
+               #placelist n code part to be assigned
     pass
 
 #ye same
@@ -340,6 +403,10 @@ def p_logical_and_expression(p):
             exit()
 
         p[0].data = { "type" : "int" } 
+        p[0].placeList[0] = helper.newVar(type_="int")
+        t=cast_string(p[1].placeList[0],p[1].data["type"],"int")
+        t1=cast_string(p[3].placeList[0],p[3].data["type"],"int")
+        p[0].code = p[1].code + p[3].code + t["code"] +t1["code"]+ [ p[0].placeList[0] + " = " + t["place"] + str(p[2].data) + t1["place"] ]
 
     pass
 
@@ -360,7 +427,11 @@ def p_logical_or_expression(p):
         if not (p[1].data["type"] in allowed_type and p[3].data["type"] in allowed_type):
             print("Type not consistent for AND exp at lineno " + str(p.lineno(0)))
             exit()
-        
+        p[0].data = { "type" : "int" } 
+        p[0].placeList[0] = helper.newVar(type_="int")
+        t=cast_string(p[1].placeList[0],p[1].data["type"],"int")
+        t1=cast_string(p[3].placeList[0],p[3].data["type"],"int")
+        p[0].code = p[1].code + p[3].code + t["code"] +t1["code"]+ [ p[0].placeList[0] + " = " + t["place"] + str(p[2].data) + t1["place"] ]
 
     pass
 
@@ -401,7 +472,7 @@ def p_assignment_expression(p):
     temp = p[1].placeList[1] if p[1].placeList[1] != None else  p[1].placeList[0]
 
     if len(p)==2:
-        p[0].data = assigner(p,1)
+        p[0].data = assign(p,1)
         p[0].placeList[0] = p[1].placeList[0]
         p[0].code = p[1].code.copy() 
     else:
@@ -438,7 +509,7 @@ def p_expression(p):
     if len(p)==2:
         p[0].data = {}
     else:
-        p[0].data = assigner(p,1)
+        p[0].data = assign(p,1)
 
     pass
 

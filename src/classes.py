@@ -67,15 +67,16 @@ class Node:
 
 class SymbolTableHelper:
     def __init__(self):
-        self.varCount = 0
+        self.varCount = 0 #cnt
         self.labelCount = 0
+        self.labeldict = {}
         self.scope = 0
-        self.scopeStack = []
-        self.offsetStack = []
-        self.symbolTables = []
-        self.lastScope = 0
+        self.scopeStack = [] 
+        self.offsetStack = [] #offsetList
+        self.symbolTables = [] #scopeTableList
+        self.lastScope = 0 #currScopeTable
 
-
+    #getnewvar
     def newVar(self, type_, size_):
         var = 't' + str(self.varCount)
         self.symbolTables[self.getScope()].insert(var, type_)
@@ -85,21 +86,22 @@ class SymbolTableHelper:
         self.varCount += 1
         return var
 
-    def newLabel(self):
-        if (self.labelCount == 0): # just to make 3AC pretty!
-            label = 'Program Start'
-        else:
-            label = 'label' + str(self.labelCount)
-        self.labelCount += 1
+    #getnewlabel
+    def newLabel(self,s="label"):
+        self.labeldict[s] = self.labeldict[s]+1 if s in self.labeldict.keys() else 0
+        label = s + "#" + str(labeldict[s])
         return label
 
+    #pushOffSet
     def newOffset(self):
         self.offsetStack.append(0)
         return
 
+    #get_offset
     def getOffset(self):
         return self.offsetStack[-1]
 
+    #popOffSet
     def popOffset(self):
         return self.offsetStack.pop()
 
@@ -121,6 +123,7 @@ class SymbolTableHelper:
         self.lastScope = self.scopeStack.pop()
         self.popOffset()
 
+    #checkVar
     def checkId(self,identifier, type_='default'):
         if type_ == 'global':
             if self.symbolTables[0].lookUp(identifier) is True:
@@ -175,6 +178,7 @@ class SymbolTableHelper:
                 if self.symbolTables[scope].getArg(identifier) is not None:
                     return scope
 
+    #getParentScope
     def getNearest(self, type_):
         # return nearest parent scope with name = type_(func, for), -1 if no such scope exist
         for scope in self.scopeStack[::-1]:
