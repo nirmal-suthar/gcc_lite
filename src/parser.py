@@ -300,105 +300,95 @@ def p_declaration(p):
     ''' declaration	: declaration_specifiers ';'
 	        | declaration_specifiers init_declarator_list ';'
     '''
-    p[0] = ['declaration']
-    if len(p)==4:
-        p[0] += p[1:]
-    pass
+    if len(p) == 2:
+        p[0] = Declaration(p[1], None);
+    else:
+        p[0] = Declaration(p[1], p[2]);
 
 def p_declaration_specifiers(p):
-    ''' declaration_specifiers : storage_class_specifier
-            | storage_class_specifier declaration_specifiers
+    ''' declaration_specifiers : storage_class_specifier type_specifier
             | type_specifier
-            | type_specifier declaration_specifiers
-            | type_qualifier
-            | type_qualifier declaration_specifiers
     '''
-    p[0] = ['declaration_specifiers']
-    #  + p[1:]
-    pass
+    if len(p) == 2:
+        p[0] = DeclarationSpecifier(p[1])
+    else:
+        p[0] = DeclarationSpecifier(p[2], p[1])
 
 def p_init_declarator_list(p):
     ''' init_declarator_list : init_declarator
             | init_declarator_list ',' init_declarator
     '''
-    p[0] = ['init_declarator_list'] + p[1:]
-    pass
+    if len(p) == 2:
+        p[0] = InitDeclaratorList(p[1])
+    else:
+        p[1].add_init_expr(p[2]);
+        p[0] = p[1]
 
 
 def p_init_declarator(p):
     ''' init_declarator : declarator
             | declarator '=' initializer
     '''
-    p[0] = ['init_declarator']
-    if len(p) == 4:
-        p[0] += p[1:]
-
-    pass
+    if len(p) == 2:
+        p[0] = InitDeclarator(p[1])
+    else:
+        p[0] = InitDeclarator(p[1], p[3])
 
 def p_storage_class_specifier(p):
     ''' storage_class_specifier : TYPEDEF
         | EXTERN
         | STATIC
-        | AUTO
-        | REGISTER
     '''
-    p[0] = ['storage_class_specifier'] + p[1:]
-    pass
+    p[0] = StorageSpecifier(p[1])
 
 def p_type_specifier(p):
     ''' type_specifier : VOID
             | CHAR
-            | SHORT
             | INT
-            | LONG
             | FLOAT
             | DOUBLE
-            | SIGNED
-            | UNSIGNED
             | struct_or_union_specifier
-            | enum_specifier
             | TYPE_NAME
     '''
-    p[0] = ['type_specifier'] 
-    # + p[1:]
-    pass
+    p[0] = TypeSpecifier(p[1])
 
 def p_struct_or_union_specifier(p):
     ''' struct_or_union_specifier : struct_or_union IDENTIFIER '{' struct_declaration_list '}'
             | struct_or_union '{' struct_declaration_list '}'
             | struct_or_union IDENTIFIER
     '''
-    p[0] = ['struct_or_union_specifier'] + p[1:]
-    pass
+    if len(p) == 3:
+        p[0] = StructUnionSpecifier(p[1], name=p[2])
+    elif len(p) = 5:
+        p[0] = StructUnionSpecifier(p[1], sturct_decls_list=p[3])
+    else:
+        p[0] = StructUnionSpecifier(p[1], name=p[2], sturct_decls_list=p[4])
 
 def p_struct_or_union(p):
     ''' struct_or_union : STRUCT
             | UNION
     '''
-    p[0] = ['struct_or_union'] + p[1:]
-    pass
+    p[0] = p[1]
 
 def p_struct_declaration_list(p):
     ''' struct_declaration_list : struct_declaration
             | struct_declaration_list struct_declaration
     '''
-    p[0] = ['struct_declaration_list'] + p[1:]
-    pass
+    if len(p) == 2:
+        p[0] = StructDeclarationList(p[1])
+    else:
+        p[1].add_decls(p[2])
+        p[0] = p[1]
 
 def p_struct_declaration(p):
     ''' struct_declaration : specifier_qualifier_list struct_declarator_list ';'
     '''
-    p[0] = ['struct_declaration'] + p[1:]
-    pass
+    p[0] = StructDeclaration(p[1], p[2])
 
 def p_specifier_qualifier_list(p):
-    ''' specifier_qualifier_list : type_specifier specifier_qualifier_list
-            | type_specifier
-            | type_qualifier specifier_qualifier_list
-            | type_qualifier
+    ''' specifier_qualifier_list : type_specifier
     '''
-    p[0] = ['specifier_qualifier_list'] + p[1:]
-    pass
+    p[0] = p[1]
 
 def p_struct_declarator_list(p):
     ''' struct_declarator_list : struct_declarator
@@ -408,41 +398,39 @@ def p_struct_declarator_list(p):
     pass
 
 def p_struct_declarator(p):
-    ''' struct_declarator : declarator
-            | ':' constant_expression
-            | declarator ':' constant_expression
+    ''' struct_declarator : declarator ':' constant_expression
     '''
     p[0] = ['struct_declarator'] + p[1:]
     pass
 
-def p_enum_specifier(p):
-    ''' enum_specifier : ENUM '{' enumerator_list '}'
-            | ENUM IDENTIFIER '{' enumerator_list '}'
-            | ENUM IDENTIFIER
-    '''
-    p[0] = ['enum_specifier'] + p[1:]
-    pass
+# def p_enum_specifier(p):
+#     ''' enum_specifier : ENUM '{' enumerator_list '}'
+#             | ENUM IDENTIFIER '{' enumerator_list '}'
+#             | ENUM IDENTIFIER
+#     '''
+#     p[0] = ['enum_specifier'] + p[1:]
+#     pass
 
-def p_enumerator_list(p):
-    ''' enumerator_list : enumerator
-            | enumerator_list ',' enumerator
-    '''
-    p[0] = ['enumerator_list'] + p[1:]
-    pass
+# def p_enumerator_list(p):
+#     ''' enumerator_list : enumerator
+#             | enumerator_list ',' enumerator
+#     '''
+#     p[0] = ['enumerator_list'] + p[1:]
+#     pass
 
-def p_enumerator(p):
-    ''' enumerator : IDENTIFIER
-            | IDENTIFIER '=' constant_expression
-    '''
-    p[0] = ['enumerator'] + p[1:]
-    pass
+# def p_enumerator(p):
+#     ''' enumerator : IDENTIFIER
+#             | IDENTIFIER '=' constant_expression
+#     '''
+#     p[0] = ['enumerator'] + p[1:]
+#     pass
 
-def p_type_qualifier(p):
-    ''' type_qualifier : CONST
-            | VOLATILE
-    '''
-    p[0] = ['type_qualifier'] + p[1:]
-    pass
+# def p_type_qualifier(p):
+#     ''' type_qualifier : CONST
+#             | VOLATILE
+#     '''
+#     p[0] = ['type_qualifier'] + p[1:]
+#     pass
 
 def p_declarator(p):
     ''' declarator : pointer direct_declarator
@@ -457,27 +445,25 @@ def p_direct_declarator(p):
             | direct_declarator '[' constant_expression ']'
             | direct_declarator '[' ']'
             | direct_declarator '(' parameter_type_list ')'
-            | direct_declarator '(' identifier_list ')'
             | direct_declarator '(' ')'
     '''
     p[0] = ['direct_declarator'] + p[1:]
+            # | direct_declarator '(' identifier_list ')'
     pass
 
 def p_pointer(p):
     ''' pointer : '*'
-            | '*' type_qualifier_list
             | '*' pointer
-            | '*' type_qualifier_list pointer
     '''
     p[0] = ['pointer'] + p[1:]
     pass
 
-def p_type_qualifier_list(p):
-    ''' type_qualifier_list : type_qualifier
-            | type_qualifier_list type_qualifier
-    '''
-    p[0] = ['type_qualifier_list'] + p[1:]
-    pass
+# def p_type_qualifier_list(p):
+#     ''' type_qualifier_list : type_qualifier
+#             | type_qualifier_list type_qualifier
+#     '''
+#     p[0] = ['type_qualifier_list'] + p[1:]
+#     pass
 
 def p_parameter_type_list(p):
     ''' parameter_type_list : parameter_list
@@ -501,12 +487,12 @@ def p_parameter_declaration(p):
     p[0] = ['parameter_declaration'] + p[1:]
     pass
 
-def p_identifier_list(p):
-    ''' identifier_list : IDENTIFIER
-            | identifier_list ',' IDENTIFIER
-    '''
-    p[0] = ['identifier_list'] + p[1:]
-    pass
+# def p_identifier_list(p):
+#     ''' identifier_list : IDENTIFIER
+#             | identifier_list ',' IDENTIFIER
+#     '''
+#     p[0] = ['identifier_list'] + p[1:]
+#     pass
 
 def p_type_name(p):
     ''' type_name : specifier_qualifier_list
@@ -582,9 +568,9 @@ def p_labeled_statement(p):
     else:
         p[0] = LabeledStmt((p[1],p[2]), p[3])
 
-# FIXME: same func name works??
+# FIXME: same func name works?? No
 
-def p_compound_statement(p):
+def p_compound_statement_0(p):
     ''' compound_statement : '{' declaration_list '}'
     '''
     p[0] = CompoundStmt(p[2], None)

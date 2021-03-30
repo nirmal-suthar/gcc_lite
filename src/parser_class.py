@@ -55,6 +55,69 @@ class CommaExpr(BaseExpr):
         self.expr_list.append(expr)
 
 # #############################################################################
+# Declarators            
+# #############################################################################
+
+class Declaration():
+    def __init__(self, specifier, init_list):
+        self.specifier = specifier
+        self.init_list = init_list
+
+class InitDeclaratorList():
+    def __init__(self, *init_expr):
+        self.init_list = init_expr
+
+    def add_init_expr(self, expr):
+        self.init_list.append(expr)
+
+class InitDeclarator():
+    def __init__(self, declarator, initializer=None):
+        self.declarator = declarator
+        self.initializer = initializer
+
+class Specifier():
+    def __init__(self, specifier_name):
+        self.specifier_name = specifier_name
+
+class DeclarationSpecifier(Specifier):
+    def __init__(self, type_spec, storage_type_spec=None):
+        super().__init__("Declaration Specifier")
+        self.type_spec = type_spec
+        self.storage_type_spec = storage_type_spec
+
+class StorageSpecifier(Specifier):
+    def __init__(self, spec):
+        super().__init__("Storage Specifier")
+        self.spec = spec
+
+class TypeSpecifier(Specifier):
+    def __init__(self, type_name):
+        super().__init__("Type Specifier")
+        self.type_name = type_name # type_name can be a Struct Union Specifier
+
+class StructUnionSpecifier(Specifier):
+    def __init__(self, struct_union, name=None, struct_decls_list=None):
+        super().__init__("Struct Union Specifier")
+        self.struct_union = struct_union
+        self.name = name
+        self.struct_decls_list = struct_decls_list
+
+class StructDeclaration(Declaration):
+    def __init__(self, spec, init_list):
+        super().__init__(spec, init_list)
+
+class StructDeclarationList():
+    def __init__(self, *decls):
+        self.decls = decls
+
+    def add_decls(self, expr):
+        self.decls.append(expr)
+
+class StructDeclarator():
+    def __init__(self, declarator, expr):
+        self.declarator = declarator
+        self.expr =- expr
+# #############################################################################
 # Statements            
 # #############################################################################
 
