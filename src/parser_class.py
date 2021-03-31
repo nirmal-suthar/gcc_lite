@@ -6,94 +6,56 @@ import pydot
 
 class _BASENODE():
     def __init__(self):
-        pass
-        # self.dot_attr = None
-
-    # def _gen_dot_single(self, graph, key, obj, node_idx):
-
-    #     if isinstance(obj, (str, int, float, tuple)):
-    #         graph.add_node(pydot.Node(node_idx, label=repr(obj), shape='house', style='filled', color='yellowgreen'))
-    #         return node_idx
-    #     elif isinstance(obj, list):
-    #         graph.add_node(pydot.Node(node_idx, label=key, shape='egg'))
-    #         cur_idx = node_idx
-    #         for child in obj:
-    #             if child == []:
-    #                 continue
-    #             graph.add_edge(pydot.Edge(node_idx, cur_idx+1))
-    #             cur_idx = child._gen_dot(graph, cur_idx+1)
-    #         return cur_idx
-    #     elif isinstance(obj, _BASENODE):
-    #         graph.add_node(pydot.Node(node_idx, label=key, shape='egg'))
-    #         graph.add_edge(pydot.Edge(node_idx, node_idx+1))
-    #         return obj._gen_dot(graph, node_idx+1)
-    #     elif obj is None:
-    #         # pass
-    #         return node_idx
-    #         # raise Exception('None please check')
-    #     else:
-    #         raise Exception('Invalid type {}'.format(type(obj)))
-            
-            
-    # def _gen_dot(self, graph, node_idx=0):
-
-    #     # graph.add_node(pydot.Node(node_idx, label=self.__dict__['t_name'], shape='egg'))
-    #     graph.add_node(pydot.Node(node_idx, label='TODO', shape='egg'))
-    #     cur_idx = node_idx
-    #     for key in filter(lambda x: x!='t_name', self.__dict__.keys()):
-    #         child = self.__dict__[key]
-    #         graph.add_edge(pydot.Edge(node_idx, cur_idx+1))
-    #         cur_idx = self._gen_dot_single(graph, key, child, cur_idx+1)
-    #     return cur_idx
+        self.attr_ignore = ['attr_ignore']
 
     @staticmethod
-    def _gen_dot_single(graph, key, obj, node_idx):
+    def _gen_dot(graph, obj, node_idx):
+        """Get a list of node and edge declarations."""
 
         if isinstance(obj, (str, int, float, tuple)):
             graph.add_node(pydot.Node(node_idx, label=repr(obj), shape='house', style='filled', color='yellowgreen'))
-            return node_idx
-        elif isinstance(obj, list):
-            graph.add_node(pydot.Node(node_idx, label=key, shape='egg'))
-            cur_idx = node_idx
-            for child in obj:
-                if child == []:
-                    continue
-                graph.add_edge(pydot.Edge(node_idx, cur_idx+1))
-                cur_idx = _BASENODE._gen_dot_single(graph, key, child, cur_idx+1)
-            return cur_idx
         elif isinstance(obj, _BASENODE):
-            graph.add_node(pydot.Node(node_idx, label=key, shape='egg'))
-            graph.add_edge(pydot.Edge(node_idx, node_idx+1))
-            return obj._gen_dot(graph, node_idx+1)
-        elif obj is None:
-            # pass
-            return node_idx
-            # raise Exception('None please check')
+            graph.add_node(pydot.Node(node_idx, label=obj.__class__.__name__, shape='egg'))
+        elif isinstance(obj, list):
+            pass
         else:
             raise Exception('Invalid type {}'.format(type(obj)))
-            
-            
-    def _gen_dot(self, graph, node_idx=0):
-
-        # graph.add_node(pydot.Node(node_idx, label=self.__dict__['t_name'], shape='egg'))
-        graph.add_node(pydot.Node(node_idx, label=self.__class__.__name__, shape='egg'))
+        
         cur_idx = node_idx
-        for attr in self.__dict__:
-            print(attr)
-            child = getattr(self, attr)
 
-            if( child is None
-                or child == ''
-                or child == []
-                or attr == 't_name'
-            ):
-                continue
+        if isinstance(obj, list):
+            
+            for child in obj:
+                # Avoid None child node, empty strings, and empty lists
+                if (
+                    child is None
+                    or child == ""
+                    or child == []
+                ):
+                    continue
+                
+                graph.add_edge(pydot.Edge(node_idx, cur_idx+1))
+                cur_idx = _BASENODE._gen_dot(graph, child, cur_idx+1)                
 
-            graph.add_edge(pydot.Edge(node_idx, cur_idx+1))
-            cur_idx = self._gen_dot_single(graph, attr, child, cur_idx+1)
+        elif isinstance(obj, _BASENODE):
+            for attr in obj.__dict__:
+                child = getattr(obj, attr)
+                if (
+                    child is None
+                    or child == ""
+                    or child == []
+                    or attr in obj.attr_ignore
+                ):
+                    continue
+                
+                graph.add_edge(pydot.Edge(node_idx, cur_idx+1))
+                
+                if isinstance(child, list):
+                    graph.add_node(pydot.Node(cur_idx+1, label=attr, shape='egg'))
 
+                cur_idx = _BASENODE._gen_dot(graph, child, cur_idx+1)                
+                
         return cur_idx
-
 
 # #############################################################################
 # Expressions            
@@ -101,7 +63,9 @@ class _BASENODE():
 
 class BaseExpr(_BASENODE) :
     def __init__(self, t_name):
+        super().__init__()
         self.t_name = t_name
+        self.attr_ignore.append('t_name')
 
 class Const(BaseExpr):
     def __init__(self, const, dvalue):
@@ -159,11 +123,14 @@ class CommaExpr(BaseExpr):
 # #############################################################################
 
 class _BaseDecl(_BASENODE):
-    def __init__(self):
+    def __init__(self, t_name):
+        super().__init__()
         self.t_name = 'TODO'
+        self.attr_ignore.append('t_name')
     
 class Declaration(_BaseDecl):
     def __init__(self, specifier, init_list):
+        super().__init__('TODO')
         self.specifier = specifier
         self.init_list = init_list
         # dot file: print only init_list
@@ -178,13 +145,16 @@ class Declaration(_BaseDecl):
 
 class InitDeclarator(_BaseDecl):
     def __init__(self, declarator, initializer=None):
+        super().__init__('TODO')
         self.declarator = declarator
         self.initializer = initializer
     # dot: print only if initiaizer is not empty
 
 class Specifier(_BaseDecl):
     def __init__(self, specifier_name):
+        super().__init__("Specifier")
         self.specifier_name = specifier_name
+        self.attr_ignore.append('specifier_name')
 
 class DeclarationSpecifier(Specifier):
     def __init__(self, storage_type_spec, type_spec):
@@ -222,45 +192,54 @@ class StructDeclaration(Declaration):
 
 class StructDeclarator(_BaseDecl):
     def __init__(self, declarator, expr):
+        super().__init__('TODO')
         self.declarator = declarator
         self.constexpr = expr
 
 class Declarator(_BaseDecl):
     def __init__(self, ref_count, decl):
+        super().__init__('TODO')
         self.ref_count = ref_count
         self.decl = decl
 
 class DirectDecl(_BaseDecl):
     def __init__(self, directdecl, *args):
+        super().__init__('TODO')
         self.directdecl = directdecl
         self.args = args
 
 class ParamsDecl(_BaseDecl):
     def __init__(self, spec, decl=None):
+        super().__init__('TODO')
         self.spec = spec
         self.decl = decl
 
 class TypeName:
     def __init__(self, spec, abs_decl=None):
+        super().__init__('TODO')
         self.spec = spec
         self.abs_decl = abs_decl
 
 class AbsDecl(_BaseDecl):
     def __init__(self, ref_count=0, direct_abs_decl=None):
+        super().__init__('TODO')
         self.ref_count = ref_count
         self.direct_abs_decl = direct_abs_decl
 
 class DirectAbsDecl(_BaseDecl):
     def __init__(self, decl, abs_type, abs_args):
+        super().__init__('TODO')
         self.decl = decl
         self.abs_type = abs_type
         self.abs_args = abs_args
+
 # #############################################################################
 # Initializers            
 # #############################################################################
 
 class Initializers(_BASENODE):
     def __init__(self, init_list):
+        super().__init__()
         self.init_list = init_list
 
 
@@ -270,7 +249,9 @@ class Initializers(_BASENODE):
 
 class Statement(_BASENODE):
     def __init__(self, name):
+        super().__init__()
         self.name = name
+        self.attr_ignore.append('name')
 
 class LabeledStmt(Statement):
     def __init__(self, case, stmt):
@@ -318,40 +299,9 @@ class JumpStmt(Statement):
 
 class Node(_BASENODE):
     def __init__(self, t_name):
+        super().__init__()
         self.t_name = t_name
-    
-    # def _gen_dot_single(self, graph, key, obj, node_idx):
-
-    #     if isinstance(obj, (str, int, float)):
-    #         graph.add_node(pydot.Node(node_idx, label=repr(obj), shape='house', style='filled', color='yellowgreen'))
-    #         return node_idx
-    #     elif isinstance(obj, list):
-    #         graph.add_node(pydot.Node(node_idx, label=key, shape='egg'))
-    #         cur_idx = node_idx
-    #         for child in obj:
-    #             if child == []:
-    #                 continue
-    #             graph.add_edge(pydot.Edge(node_idx, cur_idx+1))
-    #             cur_idx = child._gen_dot(graph, cur_idx+1)
-    #         return cur_idx
-    #     elif isinstance(obj, _BASENODE):
-    #         graph.add_node(pydot.Node(node_idx, label=key, shape='egg'))
-    #         graph.add_edge(pydot.Edge(node_idx, node_idx+1))
-    #         return obj._gen_dot(graph, node_idx+1)
-    #     # elif isinstance(obj, NoneType):
-    #     #     raise Exception('None please check')
-    #     else:
-    #         raise Exception('Invalid type {}'.format(type(obj)))
-            
-            
-    # def _gen_dot(self, graph, node_idx=0):
-
-    #     graph.add_node(pydot.Node(node_idx, label=self.__dict__['t_name'], shape='egg'))
-    #     cur_idx = node_idx
-    #     for key in filter(lambda x: x!='t_name', self.__dict__.keys()):
-    #         child = self.__dict__[key]
-    #         cur_idx = self._gen_dot_single(graph, key, child, cur_idx+1)
-    #     return cur_idx
+        self.attr_ignore.append('t_name')
 
 class Start(Node):
     def __init__(self, units):
@@ -359,13 +309,10 @@ class Start(Node):
         self.units = units
         # self.dot_attr = {'Start': self.units}
 
-# class TranslationUnits(Node):
-#     def __init__(self, *units):
-#         super().__init__("Translation Unit")
-#         self.unit_list = units
-    
-#     def add_unit(self, unit):
-#         self.unit_list.append(unit)
+    def gen_dot(self, graph, node_idx=0):
+        """Get a list of node and edge declarations."""
+        _BASENODE._gen_dot(graph, self, node_idx)
+        print('Dot graph generated')
 
 class FuncDef(Node):
     def __init__(self, specifiers, declarator, stmt):
