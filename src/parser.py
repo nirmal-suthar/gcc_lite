@@ -103,8 +103,10 @@ def p_argument_expression_list(p):
     ''' argument_expression_list : assignment_expression
             | argument_expression_list ',' assignment_expression
     '''
-    p[0] = ['argument_expression_list'] + p[1:]
-    pass
+    if len(p) == 2:
+        p[0] = [p[1]]
+    else:
+        p[0] = p[1] + [p[3]]
 
 def p_unary_expression(p):
     ''' unary_expression : postfix_expression
@@ -323,7 +325,7 @@ def p_init_declarator_list(p):
     if len(p) == 2:
         p[0] = [p[1]]
     else:
-        p[0] = p[1].append(p[2])
+        p[0] = p[1] + [p[3]]
 
 
 def p_init_declarator(p):
@@ -379,7 +381,7 @@ def p_struct_declaration_list(p):
     if len(p) == 2:
         p[0] = [p[1]]
     else:
-        p[0] = p[1].append(p[2])
+        p[0] = p[1] + [p[2]]
 
 def p_struct_declaration(p):
     ''' struct_declaration : specifier_qualifier_list struct_declarator_list ';'
@@ -398,7 +400,7 @@ def p_struct_declarator_list(p):
     if len(p) == 2:
         p[0] = [p[1]]
     else:
-        p[0] = p[1].append(p[2])
+        p[0] = p[1] + [p[3]]
 
 def p_struct_declarator(p):
     ''' struct_declarator : declarator ':' constant_expression
@@ -484,7 +486,7 @@ def p_parameter_type_list(p):
     if len(p) == 2:
         p[0] = p[1]
     else:
-        p[0] = p[1].append(p[3])
+        p[0] = p[1] + [p[3]]
 
 def p_parameter_list(p):
     ''' parameter_list : parameter_declaration
@@ -493,7 +495,7 @@ def p_parameter_list(p):
     if len(p) == 2:
         p[0] = [p[1]]
     else:
-        p[0] = p[1].append(p[3])
+        p[0] = p[1] + [p[3]]
 
 def p_parameter_declaration(p):
     ''' parameter_declaration : declaration_specifiers declarator
@@ -562,7 +564,7 @@ def p_initializer_list(p):
     if len(p) == 2:
         p[0] = [p[1]]
     else:
-        p[0] = p[1].append(p[3])
+        p[0] = p[1] + [p[3]]
 
 # #############################################################################
 # Statements            
@@ -618,13 +620,19 @@ def p_declaration_list(p):
     ''' declaration_list : declaration
             | declaration_list declaration
     '''
-    p[0] = p[1:]
+    if len(p) == 2:
+        p[0] = [p[1]]
+    else:
+        p[0] = p[1] + [[p[2]]]
 
 def p_statement_list(p):
     ''' statement_list : statement
             | statement_list statement
     '''
-    p[0] = p[1:]
+    if len(p) == 2:
+        p[0] = [p[1]]
+    else:
+        p[0] = p[1] + [[p[2]]]
 
 def p_expression_statement(p):
     ''' expression_statement : ';'
@@ -680,7 +688,7 @@ def p_translation_unit(p):
     if len(p)==2:
         p[0] = [p[1]]
     else:
-        p[0] = p[1].append(p[2])
+        p[0] = p[1] + [p[2]]
 
 def p_external_declaration(p):
     ''' external_declaration : function_definition
