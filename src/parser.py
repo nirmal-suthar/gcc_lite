@@ -518,30 +518,71 @@ def p_type_name(p):
     ''' type_name : specifier_qualifier_list
             | specifier_qualifier_list abstract_declarator
     '''
-    p[0] = ['type_name'] + p[1:]
-    pass
+    if len(p) == 2:
+        p[0] = TypeName(p[1])
+    else:
+        p[0] = TypeName(p[1], p[2])
 
 def p_abstract_declarator(p):
     ''' abstract_declarator : pointer
             | direct_abstract_declarator
             | pointer direct_abstract_declarator
     '''
-    p[0] = ['abstract_declarator'] + p[1:]
-    pass
+    if len(p) == 2:
+        if isinstance(p[1], DirectAbsDecl):
+            p[0] = AbsDecl(direct_abs_decl=p[1])
+        else:
+            p[0] = AbsDecl(ref_count=p[1])
+    else:
+        p[0] = AbsDecl(ref_count=p[1], direct_abs_decl=p[2])
+
 
 def p_direct_abstract_declarator(p):
     ''' direct_abstract_declarator : '(' abstract_declarator ')'
-            | '[' ']'
+    '''
+    p[0] = DirectAbsDecl(decl=p[1])
+
+def p_direct_abstract_declarator(p):
+    ''' direct_abstract_declarator : '[' ']'
             | '[' constant_expression ']'
             | direct_abstract_declarator '[' ']'
             | direct_abstract_declarator '[' constant_expression ']'
-            | '(' ')'
+    '''
+    decl = None
+    abs_type = '['
+    abs_args = None
+
+    if len(p) == 3:
+        if isinstance(p[1], DirectAbsDecl):
+            decl = p[1]
+        else:
+            abs_args = p[2]
+    else:
+        decl = p[1]
+        abs_args = p[3]
+
+    p[0] = DirectAbsDecl(decl=decl, abs_type=abs_type, abs_args=abs_args)
+
+def p_direct_abstract_declarator(p):
+    ''' direct_abstract_declarator : '(' ')'
             | '(' parameter_type_list ')'
             | direct_abstract_declarator '(' ')'
             | direct_abstract_declarator '(' parameter_type_list ')'
     '''
-    p[0] = ['direct_abstract_declarator'] + p[1:]
-    pass
+    decl = None
+    abs_type = '('
+    abs_args = None
+
+    if len(p) == 3:
+        if isinstance(p[1], DirectAbsDecl):
+            decl = p[1]
+        else:
+            abs_args = p[2]
+    else:
+        decl = p[1]
+        abs_args = p[3]
+
+    p[0] = DirectAbsDecl(decl=decl, abs_type=abs_type, abs_args=abs_args)
 
 # #############################################################################
 # Initializers            

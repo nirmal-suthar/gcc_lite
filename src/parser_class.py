@@ -240,6 +240,21 @@ class ParamsDecl(_BaseDecl):
         self.spec = spec
         self.decl = decl
 
+class TypeName:
+    def __init__(self, spec, abs_decl=None):
+        self.spec = spec
+        self.abs_decl = abs_decl
+
+class AbsDecl(_BaseDecl):
+    def __init__(self, ref_count=0, direct_abs_decl=None):
+        self.ref_count = ref_count
+        self.direct_abs_decl = direct_abs_decl
+
+class DirectAbsDecl(_BaseDecl):
+    def __init__(self, decl, abs_type, abs_args):
+        self.decl = decl
+        self.abs_type = abs_type
+        self.abs_args = abs_args
 # #############################################################################
 # Initializers            
 # #############################################################################
