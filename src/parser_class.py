@@ -4,6 +4,30 @@ import pydot
 # Misc.            
 # #############################################################################
 
+class SymbolTable:
+    def __init__(self, parent=None):
+
+        # NOTE: i was thinking to add complete 
+        # symboltable linkedlist inside this function
+        # as function and struct will remain in global
+        # level rest each function and scope will have
+        # local symbol table consisting of only variables!
+
+        self.variable = {}
+        self.parent = parent
+        self.metadata['name'] = 'TODO'
+        self.function = {}
+    
+    def look_up(self, id):
+        pass
+
+    def get_size(self, dtype):
+        pass
+
+    def add_typedef(self, alias, actual):
+        pass
+
+
 class _BASENODE():
     def __init__(self):
         self.attr_ignore = ['attr_ignore']
@@ -34,8 +58,10 @@ class _BASENODE():
                 ):
                     continue
                 
+                _gen_dot_func = obj._gen_dot if isinstance(obj, _BASENODE) else _BASENODE._gen_dot
+
                 graph.add_edge(pydot.Edge(node_idx, cur_idx+1))
-                cur_idx = _BASENODE._gen_dot(graph, child, cur_idx+1)                
+                cur_idx = _gen_dot_func(graph, child, cur_idx+1)                
 
         elif isinstance(obj, _BASENODE):
             for attr in obj.__dict__:
@@ -53,7 +79,8 @@ class _BASENODE():
                 if isinstance(child, list):
                     graph.add_node(pydot.Node(cur_idx+1, label=attr, shape='egg'))
 
-                cur_idx = _BASENODE._gen_dot(graph, child, cur_idx+1)                
+                _gen_dot_func = obj._gen_dot if isinstance(obj, _BASENODE) else _BASENODE._gen_dot
+                cur_idx = _gen_dot_func(graph, child, cur_idx+1)                
                 
         return cur_idx
 
@@ -309,9 +336,33 @@ class Start(Node):
         self.units = units
         # self.dot_attr = {'Start': self.units}
 
+    @staticmethod
+    def _gen_dot(graph, obj, node_idx):
+        """Get a list of node and edge declarations."""
+
+        graph.add_node(pydot.Node(node_idx, label=obj.__class__.__name__, 
+                shape='doubleoctagon', color='orange', style='filled'
+            )
+        )
+        cur_idx = node_idx
+            
+        for child in obj.units:
+            # Avoid None child node, empty strings, and empty lists
+            if (
+                child is None
+                or child == ""
+                or child == []
+            ):
+                continue
+            
+            graph.add_edge(pydot.Edge(node_idx, cur_idx+1))
+            cur_idx = child._gen_dot(graph, child, cur_idx+1)                
+                
+        return cur_idx
+
     def gen_dot(self, graph, node_idx=0):
         """Get a list of node and edge declarations."""
-        _BASENODE._gen_dot(graph, self, node_idx)
+        self._gen_dot(graph, self, node_idx)
         print('Dot graph generated')
 
 class FuncDef(Node):
