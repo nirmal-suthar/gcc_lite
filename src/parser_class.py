@@ -3,6 +3,65 @@ import pydot
 symtable = SymbolTable()
 compilation_err = []
 
+# #############################################################################
+# Type checking helpers            
+# #############################################################################
+
+operator_type={}
+operator_type["+"]=["int","float","char"]
+operator_type["-"]=operator_type["+"]
+operator_type["*"]=operator_type["+"]
+operator_type["/"]=operator_type["+"]
+operator_type["%"]=["int"]
+
+operator_type[">"]=["int","float","char"]
+operator_type[">="]=operator_type[">"]
+operator_type["<"]=operator_type[">"]
+operator_type["<="]=operator_type[">"]
+operator_type["||"]=operator_type[">"]
+operator_type["&&"]=operator_type[">"]
+operator_type["!"]=operator_type[">"]
+
+
+operator_type["<<"]=["int"]
+operator_type[">>"]=operator_type["<<"]
+operator_type["|"]=["<<"]
+operator_type["&"]=operator_type["|"]
+operator_type["~"]=operator_type["|"]
+operator_type["^"]=operator_type["|"]
+
+allowed_types={}
+allowed_types["float"]=["int","long long int", "long int" ,"float","char" ]
+allowed_types["int"]=["float", "char","int"]
+allowed_types["char"]=["int", "char"]
+allowed_types["pointer"]=["int","float"]
+
+def op_allowed(op, typ):
+    global operator_type
+    if op not in operator_type.keys():
+        return True
+    return typ in operator_type[op]
+
+def print_compilation_error(msg, line):
+    print("Error at line : " + str(line) + " :: " + msg)
+    exit()
+
+#used for type conversion
+def allowed_typecast(converted_from,converted_to):
+    global allowed_types
+    if converted_from==converted_to:
+        return True
+    # if "|" in converted_from or "|" in converted_to:
+    #     if "|" in converted_from and converted_from[-1]=='p' and (converted_to[-1]=="p" or converted_to in allowed_types["pointer"]):
+    #         return True
+    #     return False
+    if converted_to not in allowed_types.keys():
+        return False
+    return (converted_from in allowed_types[converted_to])
+
+def get_expr_type(expr):
+    #function to get type of an expression
+    
 
 # #############################################################################
 # Misc.            
@@ -190,9 +249,18 @@ class OpExpr(BaseExpr):
         self.ops = ops
         self.rhs = rhs
 
+        lhs_type = get_expr_type(self.lhs)
+        rhs_type = get_expr_type(self.rhs)
+        if lhs_type not in operator_type[ops] or rhs_type not in operator_type[ops]:
+            print_compilation_error("Type mismatch error",lhs.lineno(0))
+
 class UnaryExpr(OpExpr):
     def __init__(self, ops, rhs):
         super().__init__(None, ops, rhs)
+
+        rhs_type = get_expr_type(self.rhs)
+        if rhs_type not in operator_type[ops]:
+            print_compilation_error("Type mismatch error",rhs.lineno(0))
 
 class PostfixExpr(OpExpr):
     def __init__(self, lhs, *ops):
@@ -203,6 +271,10 @@ class CastExpr(BaseExpr):
         super().__init__("Cast Expression")
         self.type = _type
         self.expr = Expr
+
+        curr_type = get_expr_type(self.expr)
+        if not allowed_typecast(curr_type,type)
+            print_compilation_error("Type conversion error",expr.lineno(0))
 
 class AssignExpr(OpExpr):
     def __init__(self, lhs, ops, rhs):
