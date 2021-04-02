@@ -1,6 +1,10 @@
 #! /usr/bin/env python3
 
-# from CS335.gcc_lite.src.parser_class import *
+try:
+    from CS335.gcc_lite.src.parser_class import *
+except:
+    pass
+
 from ply import yacc
 from lexer import lexer, tokens
 from parser_class import *
@@ -33,11 +37,36 @@ def p_start(p):
     '''
     p[0] = Start(p[1])
 
-# def p_empty(p):
-#     """ empty :
-#     """
-#     p[0] = ['empty'] + p[1:]
-#     pass
+def p_empty(p):
+    """ empty :
+    """
+    p[0] = None
+
+def p_push_scope(p):
+    ''' push_scope : empty
+    '''
+    if isinstance(p[-1], ScopeName):
+        symtable.push_scope(p[-1].name)
+    else:
+        symtable.push_scope()
+
+    p[0] = None
+
+def p_pop_scope(p):
+    ''' pop_scope : empty
+    '''
+    symtable.pop_scope()
+    p[0] = None
+
+def p_func_scope(p):
+    ''' func_scope : empty
+    '''
+    p[0] = ScopeName('Function')
+
+def p_loop_scope(p):
+    ''' loop_scope : empty
+    '''
+    p[0] = ScopeName('Loop')
 
 def p_error(p):
     position = (
@@ -364,9 +393,9 @@ def p_struct_or_union_specifier(p):
     if len(p) == 3:
         p[0] = StructUnionSpecifier(p[1], name=p[2])
     elif len(p) == 5:
-        p[0] = StructUnionSpecifier(p[1], sturct_decls_list=p[3])
+        p[0] = StructUnionSpecifier(p[1], decls_list=p[3])
     else:
-        p[0] = StructUnionSpecifier(p[1], name=p[2], sturct_decls_list=p[4])
+        p[0] = StructUnionSpecifier(p[1], name=p[2], decls_list=p[4])
 
 def p_struct_or_union(p):
     ''' struct_or_union : STRUCT
@@ -537,12 +566,12 @@ def p_abstract_declarator(p):
         p[0] = AbsDecl(ref_count=p[1], direct_abs_decl=p[2])
 
 
-def p_direct_abstract_declarator(p):
+def p_direct_abstract_declarator_0(p):
     ''' direct_abstract_declarator : '(' abstract_declarator ')'
     '''
     p[0] = DirectAbsDecl(decl=p[1])
 
-def p_direct_abstract_declarator(p):
+def p_direct_abstract_declarator_1(p):
     ''' direct_abstract_declarator : '[' ']'
             | '[' constant_expression ']'
             | direct_abstract_declarator '[' ']'
@@ -563,7 +592,7 @@ def p_direct_abstract_declarator(p):
 
     p[0] = DirectAbsDecl(decl=decl, abs_type=abs_type, abs_args=abs_args)
 
-def p_direct_abstract_declarator(p):
+def p_direct_abstract_declarator_2(p):
     ''' direct_abstract_declarator : '(' ')'
             | '(' parameter_type_list ')'
             | direct_abstract_declarator '(' ')'
@@ -631,31 +660,27 @@ def p_labeled_statement(p):
     else:
         p[0] = LabeledStmt((p[1],p[2]), p[3])
 
-# FIXME: same func name works?? No
-
 def p_compound_statement_0(p):
-    ''' compound_statement : '{' declaration_list '}'
+    ''' compound_statement : '{' push_scope declaration_list pop_scope '}'
     '''
-    p[0] = CompoundStmt(p[2], None)
+    p[0] = CompoundStmt(p[3], None)
 
 def p_compound_statement(p):
-    ''' compound_statement : '{' '}'
-            | '{' statement_list '}'
-            
-            | '{' declaration_list statement_list '}'
+    ''' compound_statement : '{' empty empty '}' 
+            | '{' push_scope statement_list pop_scope '}'   
+            | '{' push_scope  declaration_list statement_list pop_scope '}' 
     '''
     
     decls=None
     stmts=None
 
-    if len(p) == 4:
-        stmts = p[2]
-    elif len(p) == 5:
-        decls = p[2]
+    if len(p) == 6:
         stmts = p[3]
+    elif len(p) == 7:
+        decls = p[3]
+        stmts = p[4]
 
     p[0] = CompoundStmt(decls, stmts)
-
 
 def p_declaration_list(p):
     ''' declaration_list : declaration
@@ -695,16 +720,16 @@ def p_selection_statement(p):
         p[0] = SelectionStmt(p[1], p[3], p[5], p[7])
 
 def p_iteration_statement(p):
-    ''' iteration_statement : WHILE '(' expression ')' statement
-            | FOR '(' expression_statement expression_statement ')' statement
-            | FOR '(' expression_statement expression_statement expression ')' statement
+    ''' iteration_statement : WHILE '(' expression ')' loop_scope statement
+            | FOR '(' expression_statement expression_statement ')' loop_scope statement
+            | FOR '(' expression_statement expression_statement expression ')' loop_scope statement
     '''
-    if len(p)==6:
-        p[0] = IterStmt(p[1], p[3], p[5]) 
-    elif len(p)==7:
-        p[0] = IterStmt(p[1], (p[3](),p[4](),None), p[6]) 
+    if len(p)==7:
+        p[0] = IterStmt(p[1], p[3], p[6]) 
+    elif len(p)==8:
+        p[0] = IterStmt(p[1], (p[3](),p[4](),None), p[7]) 
     else:
-        p[0] = IterStmt(p[1], (p[3](),p[4](),p[5]), p[7]) 
+        p[0] = IterStmt(p[1], (p[3](),p[4](),p[5]), p[8]) 
 
 def p_jump_statement(p):
     ''' jump_statement : GOTO IDENTIFIER ';'
@@ -738,9 +763,22 @@ def p_external_declaration(p):
     p[0] = p[1]
 
 def p_function_definition(p):
-    ''' function_definition : declaration_specifiers declarator compound_statement
+    ''' function_definition : declaration_specifiers declarator func_scope compound_statement
     '''
-    p[0] = FuncDef(p[1], p[2], p[3])
+    p[0] = FuncDef(p[1], p[2], p[4])
 
-# Build the parser
+# def _parse(ifile):
+#         symtable = SymbolTable()
+#         compilation_err = []
+
+#         # # lexer
+#         # lexer = lexer
+
+#         # Build the parser
+#         parser = yacc.yacc()
+
+#         return parser.parse(ifile)
+
+# if __name__ == '__main__':
+symtable = SymbolTable()
 parser = yacc.yacc()

@@ -1,32 +1,106 @@
+import typing
 import pydot
+symtable = SymbolTable()
+compilation_err = []
+
 
 # #############################################################################
 # Misc.            
 # #############################################################################
 
-class SymbolTable:
-    def __init__(self, parent=None):
-
-        # NOTE: i was thinking to add complete 
-        # symboltable linkedlist inside this function
-        # as function and struct will remain in global
-        # level rest each function and scope will have
-        # local symbol table consisting of only variables!
-
-        self.variable = {}
-        self.parent = parent
-        self.metadata['name'] = 'TODO'
-        self.function = {}
+class StructType:
+    def __init__(self, struct_name, struct_decl):
+        self.struct_name = struct_name
+        self.struct_decl = self.struct_decl
+        # TODO 
     
-    def look_up(self, id):
-        pass
+    def _get_size(self):
+        raise Exception('TODO')
+
+class variable:
+    def __init__(self, name, ref_count, _type):
+        self.name = name
+        self.ref_count = ref_count
+        self.type = _type
+
+class ScopeTable:
+    def __init__(self, scope_depth=0, parent=None):
+        self.scope_depth = scope_depth # scope depth
+        self.parent = parent # parent scopeTable
+        self.variables = {} # for identifiers
+        self.aliases = {} # for typedefs
+        self.structs = {} # for structs and union
+        self.metadata = 'TODO' # will include function, loop or ifelse
+
+    def lookup_var(self, name):
+        if name in self.variables:
+            return True
+        else:
+            return False
+        # return self.parent.lookup_var(name) if self.parent is not None else False
+    
+    def lookup_struct(self, name):
+        if name in self.structs:
+            return True
+        # return self.parent.lookup_struct(name) if self.parent is not None else False
+    
+    def lookup_alias(self, name):
+        if name in self.aliases:
+            return True
+        # return self.parent.lookup_alias(name) if self.parent is not None else False
+        
+class SymbolTable():
+    def __init__(self):
+
+        self.function = {} # for function (func can only be declared in global mode)
+        self.global_scope = ScopeTable()
+        self.global_scope.metadata = 'Global'
+        self.all_scope = [self.global_scope]
+
+        self.scope_stack = [self.global_scope]
+    
+    def cur_depth(self):
+        return len(self.scope_stack)
+
+    def cur_scope(self):
+        assert len(self.scope_stack) >= 1
+        return self.scope_stack[-1]
+
+    def push_scope(self, scope_type='TODO') -> None:
+        new_scope = ScopeTable(self.cur_depth(), self.scope_stack[-1])
+        self.all_scope.append(new_scope)
+        self.scope_stack.append(new_scope)
+
+    def pop_scope(self) -> None:
+        self.scope_stack.pop()
+
+    def lookup_var(self, name):
+        # return self.cur_scope().lookup_var(name)        
+        raise Exception('TODO')
+
+    def lookup_struct(self, id):
+        raise Exception('TODO')
+
+    def lookup_alias(self, id):
+        raise Exception('TODO')
+
+    def lookup_func(self, id):
+        raise Exception('TODO')
 
     def get_size(self, dtype):
-        pass
+        raise Exception('TODO')
+
+    def add_var(self, id):
+        raise Exception('TODO')
+
+    def add_struct(self, type):
+        raise Exception('TODO')
 
     def add_typedef(self, alias, actual):
-        pass
-
+        raise Exception('TODO')
+        
+    def add_func(self, func):
+        raise Exception('TODO')
 
 class _BASENODE():
     def __init__(self):
@@ -83,6 +157,10 @@ class _BASENODE():
                 cur_idx = _gen_dot_func(graph, child, cur_idx+1)                
                 
         return cur_idx
+
+class ScopeName(_BASENODE):
+    def __init__(self, name):
+        self.name = name
 
 # #############################################################################
 # Expressions            
@@ -159,8 +237,18 @@ class Declaration(_BaseDecl):
     def __init__(self, specifier, init_list):
         super().__init__('TODO')
         self.specifier = specifier
-        self.init_list = init_list
+        self.init_list = [] if init_list is None else init_list
         # dot file: print only init_list
+
+        # FIXME: ignoring storage_class_speciier for now!
+        for id in self.init_list:
+            if symtable.lookup_var(id.decl):
+
+
+
+
+
+
 
 # class InitDeclaratorList():
 #     def __init__(self, *init_expr):
@@ -200,11 +288,11 @@ class DeclarationSpecifier(Specifier):
 #         self.type_name = type_name # type_name can be a Struct Union Specifier
 
 class StructUnionSpecifier(Specifier):
-    def __init__(self, struct_union, name=None, struct_decls_list=None):
+    def __init__(self, struct_union, name=None, decls_list=None):
         super().__init__("Struct or Union Specifier")
         self.struct_union = struct_union
         self.name = name
-        self.struct_decls_list = struct_decls_list
+        self.decls_list = decls_list
 
 class StructDeclaration(Declaration):
     def __init__(self, spec, init_list):
