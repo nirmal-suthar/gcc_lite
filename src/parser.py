@@ -142,7 +142,6 @@ def p_unary_expression(p):
             | INC_OP unary_expression
             | DEC_OP unary_expression
             | unary_operator cast_expression
-            | SIZEOF unary_expression
             | SIZEOF '(' type_name ')'
     '''
     if len(p)==2:
@@ -368,7 +367,6 @@ def p_init_declarator(p):
 
 def p_storage_class_specifier(p):
     ''' storage_class_specifier : TYPEDEF
-        | EXTERN
         | STATIC
     '''
     p[0] = p[1]

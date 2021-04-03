@@ -7,60 +7,6 @@ compilation_err = []
 # Type checking helpers            
 # #############################################################################
 
-operator_type={}
-operator_type["+"]=["int","float","char"]
-operator_type["-"]=operator_type["+"]
-operator_type["*"]=operator_type["+"]
-operator_type["/"]=operator_type["+"]
-operator_type["%"]=["int"]
-
-operator_type[">"]=["int","float","char"]
-operator_type[">="]=operator_type[">"]
-operator_type["<"]=operator_type[">"]
-operator_type["<="]=operator_type[">"]
-operator_type["||"]=operator_type[">"]
-operator_type["&&"]=operator_type[">"]
-operator_type["!"]=operator_type[">"]
-
-
-operator_type["<<"]=["int"]
-operator_type[">>"]=operator_type["<<"]
-operator_type["|"]=["<<"]
-operator_type["&"]=operator_type["|"]
-operator_type["~"]=operator_type["|"]
-operator_type["^"]=operator_type["|"]
-
-allowed_types={}
-allowed_types["float"]=["int","long long int", "long int" ,"float","char" ]
-allowed_types["int"]=["float", "char","int"]
-allowed_types["char"]=["int", "char"]
-allowed_types["pointer"]=["int","float"]
-
-def op_allowed(op, typ):
-    global operator_type
-    if op not in operator_type.keys():
-        return True
-    return typ in operator_type[op]
-
-def print_compilation_error(msg, line):
-    print("Error at line : " + str(line) + " :: " + msg)
-    exit()
-
-#used for type conversion
-def allowed_typecast(converted_from,converted_to):
-    global allowed_types
-    if converted_from==converted_to:
-        return True
-    # if "|" in converted_from or "|" in converted_to:
-    #     if "|" in converted_from and converted_from[-1]=='p' and (converted_to[-1]=="p" or converted_to in allowed_types["pointer"]):
-    #         return True
-    #     return False
-    if converted_to not in allowed_types.keys():
-        return False
-    return (converted_from in allowed_types[converted_to])
-
-def get_expr_type(expr):
-    #function to get type of an expression
     
 
 # #############################################################################
@@ -80,7 +26,7 @@ class variable:
     def __init__(self, name, ref_count, _type):
         self.name = name
         self.ref_count = ref_count
-        self.type = _type
+        self._type = _type
 
 class ScopeTable:
     def __init__(self, scope_depth=0, parent=None):
@@ -226,21 +172,112 @@ class ScopeName(_BASENODE):
 # #############################################################################
 
 class BaseExpr(_BASENODE) :
+       
     def __init__(self, t_name):
         super().__init__()
         self.t_name = t_name
         self.attr_ignore.append('t_name')
+
+    ops_type = {
+        # arithmetic operators
+        '+' : ['int', 'float', 'char'],
+        '-' : ['int', 'float', 'char'],
+        '*' : ['int', 'float', 'char'],
+        '/' : ['int', 'float', 'char'],
+        '%' : ['int'],
+
+        # comparsion operators
+        '>' : ['int', 'float', 'char'],
+        '>=' : ['int', 'float', 'char'],
+        '<' : ['int', 'float', 'char'],
+        '<=' : ['int', 'float', 'char'],
+        
+        # bool operators
+        '||' : ['int', 'float', 'char'],
+        '&&' : ['int', 'float', 'char'],
+        '!' : ['int', 'float', 'char'],
+        
+        # bits operators
+        '<<' : ['int'],
+        '>>' : ['int'],
+        '|' : ['int'],
+        '&' : ['int'],
+        '~' : ['int'],
+        '^' : ['int'],
+    }
+
+    cast_type = {
+        'int'     : ['int', 'float', 'char'],
+        'float'   : ['int', 'float', 'char'],
+        'char'    : ['int', 'char'],
+        'pointer' : ['int', 'float', 'char'],
+    }
+
+    def op_allowed(self, op, _type):
+        if op not in _BASENODE.ops_type.keys():
+            return True
+        return _type in _BASENODE.ops_type.keys[op]
+
+    # def print_compilation_error(msg, line):
+    #     print("Error at line : " + str(line) + " :: " + msg)
+    #     exit()
+
+    # #used for type conversion
+    # def allowed_typecast(converted_from,converted_to):
+    #     global allowed_types
+    #     if converted_from==converted_to:
+    #         return True
+    #     # if "|" in converted_from or "|" in converted_to:
+    #     #     if "|" in converted_from and converted_from[-1]=='p' and (converted_to[-1]=="p" or converted_to in allowed_types["pointer"]):
+    #     #         return True
+    #     #     return False
+    #     if converted_to not in allowed_types.keys():
+    #         return False
+    #     return (converted_from in allowed_types[converted_to])
+
+    # def get_expr_type(expr):
+    #     #function to get type of an expression
+    #     pass
+
+class VarType:
+    def __init__(self, ref_count, orig_type=None, _type=None):
+        self.ref_count = ref_count
+        self.orig_type = orig_type
+        self._type = self.orig_type if _type is None else _type 
+
 
 class Const(BaseExpr):
     def __init__(self, const, dvalue):
         super().__init__("Constant")
         self.const = const
         self.dvalue = dvalue
+        self.get_type()
+
+    def get_type(self):
+        if self.dvalue is 'I_CONSTANT':
+            self._type = VarType('int',0)
+        elif self.dvalue is 'F_CONSTANT':
+            self._type = VarType('float',0)
+        elif self.dvalue is 'C_CONSTANT':
+            self._type = VarType('char', 0)
+        elif self.dvalue is 'STRING_LITERAL':
+            self._type = VarType('char', 1)
+        else:
+            raise Exception('Unknown Constant type')
 
 class Identifier(BaseExpr):
     def __init__(self, ident):
         super().__init__("Identifier")
         self.ident = ident
+        self.get_type()
+
+    def get_type(self):
+        _var = symtable.lookup_var(self.ident)
+        if _var is None:
+            compilation_err.append('Undeclared Variable')
+        else:
+            self._type = VarType(_var._type, _var.ref_count)
+        
 
 class OpExpr(BaseExpr):
     def __init__(self, lhs, ops, rhs):
@@ -248,33 +285,122 @@ class OpExpr(BaseExpr):
         self.lhs = lhs
         self.ops = ops
         self.rhs = rhs
+        self.get_type()
 
-        lhs_type = get_expr_type(self.lhs)
-        rhs_type = get_expr_type(self.rhs)
-        if lhs_type not in operator_type[ops] or rhs_type not in operator_type[ops]:
-            print_compilation_error("Type mismatch error",lhs.lineno(0))
+        # lhs_type = get_expr_type(self.lhs)
+        # rhs_type = get_expr_type(self.rhs)
+        # if lhs_type not in operator_type[ops] or rhs_type not in operator_type[ops]:
+        #     print_compilation_error("Type mismatch error",lhs.lineno(0))
+
+        def get_type(self):
+            
+            if not lhs._type._type is _BASENODE.ops_type[ops] and rhs._type._type is _BASENODE.ops_type[ops]:
+                compilation_err.append('Type not compatible with ops {}'.format(self.ops)) 
+
+            if self.ops in ['||', '&&', '|', '^', '&', '==',
+                '!=', '<', '>', '<=', '>=', '>>', '<<', '+', 
+                '-', '*', '/', '%'
+            ]:
+                inferred_type = 'int'
+                ref_count = 0
+                self._type = VarType(0,'int')
+            elif lhs._type.ref_count is 0 and rhs._type.ref_count is 0:
+                ref_count, inferred_type = 'int' #TODO:
+                self._type = VarType(ref_count, inferred_type)
+            else:
+                raise Exception('TODO')
+
+            if lhs._type._type is not inferred_type:
+                self.lhs = CastExpr(inferred_type, self.lhs)
+                self.rhs = CastExpr(inferred_type, self.rhs)
+
+            self._type(ref_count, inferred_type)
 
 class UnaryExpr(OpExpr):
     def __init__(self, ops, rhs):
         super().__init__(None, ops, rhs)
+        self.get_type()
 
-        rhs_type = get_expr_type(self.rhs)
-        if rhs_type not in operator_type[ops]:
-            print_compilation_error("Type mismatch error",rhs.lineno(0))
+    def get_type(self):
+
+        if self.ops is 'sizeof':
+            inferred_type = 'int'
+            ref_count = 0
+        elif self.ops in ['--', '++', '+', '-']:
+            if self.rhs._type.ref_count is 0:
+                if self.rhs._type._type not in _BASENODE.ops_type[self.ops]:
+                    compilation_err.append('Type not compatible with ops {}'.format(self.ops)) 
+                
+                inferred_type = 'int'
+                ref_count = 0
+
+            else:
+                raise Exception('TODO')    
+
+        elif self.ops in ['!', '~']:
+            if self.rhs._type._type not in _BASENODE.ops_type[self.ops]:
+                compilation_err.append('Type not compatible with ops {}'.format(self.ops)) 
+             
+            inferred_type = 'int'
+            ref_count = 0
+        else:
+            if not isinstance(self.rhs, Identifier):
+                compilation_err('RHS should be an indentifier')
+
+            ref_count = self.rhs._type.ref_count \
+                + (1 if self.ops is '&' else -1)    
+            
+            inferred_type = self.rhs._type._type
+        
+        self._type = VarType(ref_count, inferred_type)
 
 class PostfixExpr(OpExpr):
     def __init__(self, lhs, *ops):
         super().__init__(lhs, ops, None)
 
+    def get_type(self):
+        
+        # simple operation
+        if self.ops in ['--', '++']:
+            if self.lhs._type.ref_count is 0:
+                if self.lhs._type._type not in _BASENODE.ops_type[self.ops]:
+                    compilation_err.append('Type not compatible with ops {}'.format(self.ops)) 
+                
+                inferred_type = 'int'
+                ref_count = 0
+
+            else:
+                raise Exception('TODO') 
+
+        # struct child
+        elif self.ops[0] is '.':
+            raise Exception('TODO')
+        # struct deference child 
+        elif self.ops[0] is '.':
+            raise Exception('TODO')
+        # function calling
+        elif self.ops[0] is '(':
+            arg_list = [] if len(self.ops) is 2 else self.ops[1]
+            # sanity checking of function args and 
+            # set return type as type of function
+            raise Exception('TODO')
+        # array reference
+        elif self.ops[0]:
+            # sanity checking that const_exp is 'int' and 
+            # set return type as type of function
+            raise Exception('TODO')
+            
 class CastExpr(BaseExpr):
     def __init__(self, _type, Expr):
         super().__init__("Cast Expression")
         self.type = _type
         self.expr = Expr
 
-        curr_type = get_expr_type(self.expr)
-        if not allowed_typecast(curr_type,type)
-            print_compilation_error("Type conversion error",expr.lineno(0))
+    def get_type(self):
+        raise Exception('TODO')
+        # curr_type = get_expr_type(self.expr)
+        # if not allowed_typecast(curr_type,type)
+        #     print_compilation_error("Type conversion error",expr.lineno(0))
 
 class AssignExpr(OpExpr):
     def __init__(self, lhs, ops, rhs):
@@ -312,15 +438,9 @@ class Declaration(_BaseDecl):
         self.init_list = [] if init_list is None else init_list
         # dot file: print only init_list
 
-        # FIXME: ignoring storage_class_speciier for now!
-        for id in self.init_list:
-            if symtable.lookup_var(id.decl):
-
-
-
-
-
-
+        # # FIXME: ignoring storage_class_speciier for now!
+        # for id in self.init_list:
+        #     if symtable.lookup_var(id.decl):
 
 # class InitDeclaratorList():
 #     def __init__(self, *init_expr):
