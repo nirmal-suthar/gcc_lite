@@ -1,111 +1,13 @@
 import typing
 import pydot
+from helper import *
+
 symtable = SymbolTable()
 compilation_err = []
 
 # #############################################################################
-# Type checking helpers            
-# #############################################################################
-
-    
-
-# #############################################################################
 # Misc.            
 # #############################################################################
-
-class StructType:
-    def __init__(self, struct_name, struct_decl):
-        self.struct_name = struct_name
-        self.struct_decl = self.struct_decl
-        # TODO 
-    
-    def _get_size(self):
-        raise Exception('TODO')
-
-class variable:
-    def __init__(self, name, ref_count, _type):
-        self.name = name
-        self.ref_count = ref_count
-        self._type = _type
-
-class ScopeTable:
-    def __init__(self, scope_depth=0, parent=None):
-        self.scope_depth = scope_depth # scope depth
-        self.parent = parent # parent scopeTable
-        self.variables = {} # for identifiers
-        self.aliases = {} # for typedefs
-        self.structs = {} # for structs and union
-        self.metadata = 'TODO' # will include function, loop or ifelse
-
-    def lookup_var(self, name):
-        if name in self.variables:
-            return True
-        else:
-            return False
-        # return self.parent.lookup_var(name) if self.parent is not None else False
-    
-    def lookup_struct(self, name):
-        if name in self.structs:
-            return True
-        # return self.parent.lookup_struct(name) if self.parent is not None else False
-    
-    def lookup_alias(self, name):
-        if name in self.aliases:
-            return True
-        # return self.parent.lookup_alias(name) if self.parent is not None else False
-        
-class SymbolTable():
-    def __init__(self):
-
-        self.function = {} # for function (func can only be declared in global mode)
-        self.global_scope = ScopeTable()
-        self.global_scope.metadata = 'Global'
-        self.all_scope = [self.global_scope]
-
-        self.scope_stack = [self.global_scope]
-    
-    def cur_depth(self):
-        return len(self.scope_stack)
-
-    def cur_scope(self):
-        assert len(self.scope_stack) >= 1
-        return self.scope_stack[-1]
-
-    def push_scope(self, scope_type='TODO') -> None:
-        new_scope = ScopeTable(self.cur_depth(), self.scope_stack[-1])
-        self.all_scope.append(new_scope)
-        self.scope_stack.append(new_scope)
-
-    def pop_scope(self) -> None:
-        self.scope_stack.pop()
-
-    def lookup_var(self, name):
-        # return self.cur_scope().lookup_var(name)        
-        raise Exception('TODO')
-
-    def lookup_struct(self, id):
-        raise Exception('TODO')
-
-    def lookup_alias(self, id):
-        raise Exception('TODO')
-
-    def lookup_func(self, id):
-        raise Exception('TODO')
-
-    def get_size(self, dtype):
-        raise Exception('TODO')
-
-    def add_var(self, id):
-        raise Exception('TODO')
-
-    def add_struct(self, type):
-        raise Exception('TODO')
-
-    def add_typedef(self, alias, actual):
-        raise Exception('TODO')
-        
-    def add_func(self, func):
-        raise Exception('TODO')
 
 class _BASENODE():
     def __init__(self):
@@ -240,18 +142,17 @@ class BaseExpr(_BASENODE) :
     #     pass
 
 class VarType:
-    def __init__(self, ref_count, orig_type=None, _type=None):
+    def __init__(self, ref_count, _type, arr_offset=None):
         self.ref_count = ref_count
-        self.orig_type = orig_type
-        self._type = self.orig_type if _type is None else _type 
-
+        self._type = _type
+        self.arr_offset = arr_offset
 
 class Const(BaseExpr):
     def __init__(self, const, dvalue):
         super().__init__("Constant")
         self.const = const
         self.dvalue = dvalue
-        self.get_type()
+        # self.get_type()
 
     def get_type(self):
         if self.dvalue is 'I_CONSTANT':
@@ -432,15 +333,29 @@ class _BaseDecl(_BASENODE):
         self.attr_ignore.append('t_name')
     
 class Declaration(_BaseDecl):
-    def __init__(self, specifier, init_list):
+    def __init__(self, specifier, init_list=[]):
         super().__init__('TODO')
         self.specifier = specifier
-        self.init_list = [] if init_list is None else init_list
-        # dot file: print only init_list
+        self.init_list = init_list
 
-        # # FIXME: ignoring storage_class_speciier for now!
-        # for id in self.init_list:
-        #     if symtable.lookup_var(id.decl):
+        # NOTE: handling storage_spec is remaing here
+        _type = self.specifier.type_spec
+
+        for init_decl in init_list:
+            decl = init_decl.declarator
+
+            # reference count will increase equal to 
+            # number of arr offset => int a[5][5] <-> int **a 
+            rcount = decl.ref_count + len(decl.arr_offset)
+            vartype = VarType(rcount, _type, decl.arr_offset)
+
+            # Sanity checking of arr offset
+            if not all(map(lambda x: isinstance(x, Const) and x.dvalue=='I_CONSTANT', decl.arr_offset)):
+                compilation_err.append('Only Int constant in array declaration')
+
+            # Add declaration in symtab
+            symtable.add_var(decl.name, vartype)
+
 
 # class InitDeclaratorList():
 #     def __init__(self, *init_expr):
@@ -455,7 +370,11 @@ class InitDeclarator(_BaseDecl):
         super().__init__('TODO')
         self.declarator = declarator
         self.initializer = initializer
-    # dot: print only if initiaizer is not empty
+
+        if self.initializer is not None:
+            raise Exception('Not supported')
+            
+        # dot: print only if initiaizer is not empty
 
 class Specifier(_BaseDecl):
     def __init__(self, specifier_name):
@@ -468,6 +387,14 @@ class DeclarationSpecifier(Specifier):
         super().__init__("Declaration Specifier")
         self.storage_type_spec = storage_type_spec
         self.type_spec = type_spec
+
+        if self.storage_type_spec is not None:
+            raise Exception('Storage type specs not supported')
+        
+        if isinstance(self.type_spec, StructUnionSpecifier):
+            self.type_spec = self.type_spec.struct_type
+        elif isinstance(self.type_spec, Identifier):
+            raise Exception('Aliases not supported')
 
 # class StorageSpecifier(Specifier):
 #     def __init__(self, spec):
@@ -485,6 +412,31 @@ class StructUnionSpecifier(Specifier):
         self.struct_union = struct_union
         self.name = name
         self.decls_list = decls_list
+
+        # TODO: sanity checking of decls_list
+
+        # name and decls_list both given => add to symtable 
+        # and check for possible errros 
+        if self.decls_list is not None and self.name is not None:
+            self.add_to_symtab()
+
+        # if decls list is given => contruct type from it.
+        if self.decls_list is not None:    
+            struct_type = StructType(self.decls_list)
+        # if decls list not given => lookup from struct
+        else:
+            struct_type = symtable.lookup_struct(self.name)
+            if struct_type is None:
+                compilation_err.append('No struct defined named {}'.format(name))
+                struct_type = StructType([])
+
+            
+        self.struct_type = struct_type
+
+    def add_to_symtab(self):
+        stype = StructType(self.name, self.decls_list)
+        symtable.add_struct(stype)
+
 
 class StructDeclaration(Declaration):
     def __init__(self, spec, init_list):
@@ -504,16 +456,30 @@ class StructDeclarator(_BaseDecl):
         self.constexpr = expr
 
 class Declarator(_BaseDecl):
-    def __init__(self, ref_count, decl):
+    def __init__(self, ref_count, name, arr_offset):
+        super().__init__('TODO')
+
+        # NOTE: don't add symtab function here as
+        # this is used in function parameter_list
+        # where symtab addition is not required
+
+        self.ref_count = ref_count
+        self.name = name
+        self.arr_offset = arr_offset
+
+
+# class DirectDecl(_BaseDecl):
+#     def __init__(self, directdecl, arr_args = None):
+#         super().__init__('TODO')
+#         self.directdecl = directdecl
+#         self.arr_args = arr_args
+
+class FuncDirectDecl(_BaseDecl):
+    def __init__(self, ref_count, name, param_list):
         super().__init__('TODO')
         self.ref_count = ref_count
-        self.decl = decl
-
-class DirectDecl(_BaseDecl):
-    def __init__(self, directdecl, *args):
-        super().__init__('TODO')
-        self.directdecl = directdecl
-        self.args = args
+        self.name = name
+        self.param_list = param_list
 
 class ParamsDecl(_BaseDecl):
     def __init__(self, spec, decl=None):
@@ -528,17 +494,17 @@ class TypeName:
         self.abs_decl = abs_decl
 
 class AbsDecl(_BaseDecl):
-    def __init__(self, ref_count=0, direct_abs_decl=None):
+    def __init__(self, ref_count=0, arr_dim=[]):
         super().__init__('TODO')
         self.ref_count = ref_count
-        self.direct_abs_decl = direct_abs_decl
+        self.arr_dim = arr_dim
 
-class DirectAbsDecl(_BaseDecl):
-    def __init__(self, decl, abs_type, abs_args):
-        super().__init__('TODO')
-        self.decl = decl
-        self.abs_type = abs_type
-        self.abs_args = abs_args
+# class DirectAbsDecl(_BaseDecl):
+#     def __init__(self, decl, abs_type, abs_args):
+#         super().__init__('TODO')
+#         self.decl = decl
+#         self.abs_type = abs_type
+#         self.abs_args = abs_args
 
 # #############################################################################
 # Initializers            
@@ -646,10 +612,20 @@ class Start(Node):
         print('Dot graph generated')
 
 class FuncDef(Node):
-    def __init__(self, specifiers, declarator, stmt):
+    def __init__(self, specifier, ref_count, name, args_list, stmt):
         super().__init__('Function Definition')
-        self.specifiers = specifiers
-        self.declarator = declarator
+        self.specifier = specifier
+        self.ref_count = ref_count
+        self.name = name
+        self.args_list = args_list
         self.stmt = stmt
-        # self.dot_attr = {'Function Def': [self.specifiers, ]}
 
+        # check for conflicting name function
+        if symtable.lookup_func(name) is not None:
+            compilation_err.append("conflicting name of function")
+        else:
+            self.add_to_symtab()
+
+    def add_to_symtab(self):
+        vartype = VarType(self.ref_count, self.specifier)
+        symtable.add_func(Function(vartype, self.name, self.args_list))

@@ -99,7 +99,7 @@ def p_constant(p):
 def p_identifier(p):
     ''' identifier : IDENTIFIER
     '''
-    p[0] = Identifier(p[1])  
+    p[0] = p[1] 
 
 def p_primary_expression(p):
     ''' primary_expression : identifier
@@ -333,7 +333,7 @@ def p_declaration(p):
 	        | declaration_specifiers init_declarator_list ';'
     '''
     if len(p) == 2:
-        p[0] = Declaration(p[1], None)
+        p[0] = Declaration(p[1], [])
     else:
         p[0] = Declaration(p[1], p[2])
 
@@ -359,6 +359,7 @@ def p_init_declarator_list(p):
 def p_init_declarator(p):
     ''' init_declarator : declarator
             | declarator '=' initializer
+            | function_declarator
     '''
     if len(p) == 2:
         p[0] = InitDeclarator(p[1])
@@ -372,13 +373,14 @@ def p_storage_class_specifier(p):
     p[0] = p[1]
     # p[0] = StorageSpecifier(p[1])
 
+# NOTE: removed identifier as it is causing 
+# conflicts
 def p_type_specifier(p):
     ''' type_specifier : VOID
             | CHAR
             | INT
             | FLOAT
             | struct_or_union_specifier
-            | TYPE_NAME
     '''
     p[0] = p[1]
     # p[0] = TypeSpecifier(p[1])
@@ -397,7 +399,6 @@ def p_struct_or_union_specifier(p):
 
 def p_struct_or_union(p):
     ''' struct_or_union : STRUCT
-            | UNION
     '''
     p[0] = p[1]
 
@@ -432,8 +433,7 @@ def p_struct_declarator_list(p):
 def p_struct_declarator(p):
     ''' struct_declarator : declarator ':' constant_expression
     '''
-    p[0] = ['struct_declarator'] + p[1:]
-    pass
+    p[0] = StructDeclarator(p[1], p[3])
 
 # def p_enum_specifier(p):
 #     ''' enum_specifier : ENUM '{' enumerator_list '}'
@@ -469,26 +469,43 @@ def p_declarator(p):
             | direct_declarator
     '''
     if len(p) == 2:
-        p[0] = Declarator(0, p[1])
+        (rcount, ident, args) = p[1]
+        p[0] = Declarator(rcount, ident, args)
     else:
-        p[0] = Declarator(p[1], p[2])
-
-def p_direct_declarator_0(p):
-    ''' direct_declarator : IDENTIFIER
-            | '(' declarator ')'
-    '''
-    if len(p) == 2:
-        p[0] = p[1]
-    else:
-        p[0] = p[2]
+        (rcount, ident, args) = p[2]
+        p[0] = Declarator(p[1]+rcount, ident, args)
 
 def p_direct_declarator(p):
-    ''' direct_declarator : direct_declarator '[' constant_expression ']'
-            | direct_declarator '[' ']'
-            | direct_declarator '(' parameter_type_list ')'
-            | direct_declarator '(' ')'
+    ''' direct_declarator : identifier
+            | '(' declarator ')'
+            | direct_declarator '[' constant_expression ']'
     '''
-    p[0] = DirectDecl(p[1], p[2:])
+    if len(p) == 2:
+        p[0] = (0,p[1],[])
+    elif len(p) == 4:
+        p[0] = (p[2].ref_count, p[2].name, p[2].arr_offset)
+    else:
+        (rcount, ident, args) = p[1]
+        p[0] = (rcount, ident, args+[p[3]])
+
+def p_param_list(p):
+    ''' param_list : '(' parameter_type_list ')'
+            | '(' ')'
+    '''
+    if len(p) == 2:
+        p[0] = []
+    else:
+        p[0] = p[2]  
+
+def p_function_declarator(p):
+    ''' function_declarator : identifier '(' parameter_type_list ')'
+            | pointer identifier '(' parameter_type_list ')'
+    '''
+    if len(p)==5:
+        p[0] = FuncDirectDecl(0, p[1], p[3])
+    else:
+        p[0] = FuncDirectDecl(p[1], p[2], p[4])
+        
 
 def p_pointer(p):
     ''' pointer : '*'
@@ -525,9 +542,7 @@ def p_parameter_list(p):
         p[0] = p[1] + [p[3]]
 
 def p_parameter_declaration(p):
-    ''' parameter_declaration : declaration_specifiers declarator
-            | declaration_specifiers abstract_declarator
-            | declaration_specifiers
+    '''parameter_declaration : declaration_specifiers declarator
     '''
     if len(p) == 2:
         p[0] = ParamsDecl(p[1])
@@ -556,60 +571,48 @@ def p_abstract_declarator(p):
             | pointer direct_abstract_declarator
     '''
     if len(p) == 2:
-        if isinstance(p[1], DirectAbsDecl):
-            p[0] = AbsDecl(direct_abs_decl=p[1])
-        else:
+        if isinstance(p[1], int):
             p[0] = AbsDecl(ref_count=p[1])
+        else:
+            p[0] = AbsDecl(arr_dim=p[1])
     else:
-        p[0] = AbsDecl(ref_count=p[1], direct_abs_decl=p[2])
+        p[0] = AbsDecl(ref_count=p[1], arr_dim=p[2])
 
 
-def p_direct_abstract_declarator_0(p):
-    ''' direct_abstract_declarator : '(' abstract_declarator ')'
-    '''
-    p[0] = DirectAbsDecl(decl=p[1])
+# def p_direct_abstract_declarator_0(p):
+#     ''' direct_abstract_declarator : '(' abstract_declarator ')'
+#     '''
+#     p[0] = DirectAbsDecl(decl=p[1])
 
-def p_direct_abstract_declarator_1(p):
-    ''' direct_abstract_declarator : '[' ']'
-            | '[' constant_expression ']'
-            | direct_abstract_declarator '[' ']'
+def p_direct_abstract_declarator(p):
+    ''' direct_abstract_declarator : '[' constant_expression ']'
             | direct_abstract_declarator '[' constant_expression ']'
     '''
-    decl = None
-    abs_type = '['
-    abs_args = None
-
-    if len(p) == 3:
-        if isinstance(p[1], DirectAbsDecl):
-            decl = p[1]
-        else:
-            abs_args = p[2]
+    if len(p) == 4:
+        p[0] = [p[2]]
     else:
-        decl = p[1]
-        abs_args = p[3]
+        p[0] = p[1] + [p[3]]
 
-    p[0] = DirectAbsDecl(decl=decl, abs_type=abs_type, abs_args=abs_args)
+# def p_direct_abstract_declarator_2(p):
+#     ''' direct_abstract_declarator : '(' ')'
+#             | '(' parameter_type_list ')'
+#             | direct_abstract_declarator '(' ')'
+#             | direct_abstract_declarator '(' parameter_type_list ')'
+#     '''
+#     decl = None
+#     abs_type = '('
+#     abs_args = None
 
-def p_direct_abstract_declarator_2(p):
-    ''' direct_abstract_declarator : '(' ')'
-            | '(' parameter_type_list ')'
-            | direct_abstract_declarator '(' ')'
-            | direct_abstract_declarator '(' parameter_type_list ')'
-    '''
-    decl = None
-    abs_type = '('
-    abs_args = None
+#     if len(p) == 3:
+#         if isinstance(p[1], DirectAbsDecl):
+#             decl = p[1]
+#         else:
+#             abs_args = p[2]
+#     else:
+#         decl = p[1]
+#         abs_args = p[3]
 
-    if len(p) == 3:
-        if isinstance(p[1], DirectAbsDecl):
-            decl = p[1]
-        else:
-            abs_args = p[2]
-    else:
-        decl = p[1]
-        abs_args = p[3]
-
-    p[0] = DirectAbsDecl(decl=decl, abs_type=abs_type, abs_args=abs_args)
+#     p[0] = DirectAbsDecl(decl=decl, abs_type=abs_type, abs_args=abs_args)
 
 # #############################################################################
 # Initializers            
@@ -649,8 +652,7 @@ def p_statement(p):
     p[0] = p[1]
 
 def p_labeled_statement(p):
-    ''' labeled_statement : IDENTIFIER ':' statement
-            | CASE constant_expression ':' statement
+    ''' labeled_statement : CASE constant_expression ':' statement
             | DEFAULT ':' statement
     '''
     if len(p)==4:
@@ -730,8 +732,7 @@ def p_iteration_statement(p):
         p[0] = IterStmt(p[1], (p[3](),p[4](),p[5]), p[8]) 
 
 def p_jump_statement(p):
-    ''' jump_statement : GOTO IDENTIFIER ';'
-            | CONTINUE ';'
+    ''' jump_statement : CONTINUE ';'
             | BREAK ';'
             | RETURN ';'
             | RETURN expression ';'
@@ -761,9 +762,14 @@ def p_external_declaration(p):
     p[0] = p[1]
 
 def p_function_definition(p):
-    ''' function_definition : declaration_specifiers declarator func_scope compound_statement
+    ''' function_definition : declaration_specifiers identifier param_list func_scope compound_statement
+        | declaration_specifiers pointer identifier param_list func_scope compound_statement
     '''
-    p[0] = FuncDef(p[1], p[2], p[4])
+    if len(p) == 6:
+        p[0] = FuncDef(p[1], 0, p[2], p[3], p[5])
+    else:
+        p[0] = FuncDef(p[1], p[2], p[3], p[4], p[6])
+
 
 # def _parse(ifile):
 #         symtable = SymbolTable()
@@ -778,5 +784,5 @@ def p_function_definition(p):
 #         return parser.parse(ifile)
 
 # if __name__ == '__main__':
-symtable = SymbolTable()
+
 parser = yacc.yacc()
