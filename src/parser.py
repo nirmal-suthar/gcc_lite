@@ -91,17 +91,17 @@ def p_error(p):
 def p_constant_i(p):
     ''' constant : I_CONSTANT
     '''
-    p[0] = Const(p[1], "I_CONSTANT")
+    p[0] = Const(p[1], "int")
 
 def p_constant_f(p):
     ''' constant : F_CONSTANT
     '''
-    p[0] = Const(p[1], "F_CONSTANT")
+    p[0] = Const(p[1], "float")
 
 def p_constant_c(p):
     ''' constant : C_CONSTANT
     '''
-    p[0] = Const(p[1], "C_CONSTANT")
+    p[0] = Const(p[1], "char")
 
 def p_constant_s(p):
     ''' constant : STRING_LITERAL
@@ -398,14 +398,13 @@ def p_storage_class_specifier(p):
     p[0] = p[1]
     # p[0] = StorageSpecifier(p[1])
 
-# NOTE: removed identifier as it is causing 
-# conflicts
 def p_type_specifier(p):
     ''' type_specifier : VOID
             | CHAR
             | INT
             | FLOAT
             | struct_or_union_specifier
+            | TYPE_NAME
     '''
     p[0] = p[1]
     # p[0] = TypeSpecifier(p[1])
@@ -444,7 +443,7 @@ def p_struct_declaration(p):
 def p_specifier_qualifier_list(p):
     ''' specifier_qualifier_list : type_specifier
     '''
-    p[0] = p[1]
+    p[0] = DeclarationSpecifier(None, p[1])
 
 def p_struct_declarator_list(p):
     ''' struct_declarator_list : struct_declarator
@@ -456,9 +455,14 @@ def p_struct_declarator_list(p):
         p[0] = p[1] + [p[3]]
 
 def p_struct_declarator(p):
-    ''' struct_declarator : declarator ':' constant_expression
+    ''' struct_declarator : declarator
+        |   declarator ':' constant_expression
     '''
-    p[0] = StructDeclarator(p[1], p[3])
+
+    if len(p) == 2:
+        p[0] = StructDeclarator(p[1])
+    else:
+        p[0] = StructDeclarator(p[1], p[3])
 
 # def p_enum_specifier(p):
 #     ''' enum_specifier : ENUM '{' enumerator_list '}'
@@ -569,10 +573,8 @@ def p_parameter_list(p):
 def p_parameter_declaration(p):
     '''parameter_declaration : declaration_specifiers declarator
     '''
-    if len(p) == 2:
-        p[0] = ParamsDecl(p[1])
-    else:
-        p[0] = ParamsDecl(p[1], p[2])
+    _type = VarType(p[2].ref_count, p[1].type_spec, p[2].arr_offset)
+    p[0] = (p[2].name, _type)
 
 # def p_identifier_list(p):
 #     ''' identifier_list : IDENTIFIER
@@ -585,10 +587,12 @@ def p_type_name(p):
     ''' type_name : specifier_qualifier_list
             | specifier_qualifier_list abstract_declarator
     '''
+    _type = p[1].type_spec
     if len(p) == 2:
-        p[0] = TypeName(p[1])
+        p[0] = VarType(0, _type, None)
     else:
-        p[0] = TypeName(p[1], p[2])
+        (rcount, arr_dim) = p[2]
+        p[0] = VarType(rcount, _type, arr_dim)
 
 def p_abstract_declarator(p):
     ''' abstract_declarator : pointer
@@ -597,11 +601,11 @@ def p_abstract_declarator(p):
     '''
     if len(p) == 2:
         if isinstance(p[1], int):
-            p[0] = AbsDecl(ref_count=p[1])
+            p[0] = (p[1], [])
         else:
-            p[0] = AbsDecl(arr_dim=p[1])
+            p[0] = (0, p[1])
     else:
-        p[0] = AbsDecl(ref_count=p[1], arr_dim=p[2])
+        p[0] = (p[1], p[2])
 
 
 # def p_direct_abstract_declarator_0(p):
