@@ -1,16 +1,3 @@
-class StructType:
-    def __init__(self, decls_list):
-        self.decls_list = self.decls_list
-    
-    def _get_size(self):
-        raise Exception('TODO')
-
-class Function:
-    def __init__(self, ret_type, name, args):
-        self.ret_type = ret_type    # should be VarType
-        self.name = name            # str
-        self.args = args            # list
-
 class ScopeTable:
     def __init__(self, scope_depth=0, parent=None):
         self.scope_depth = scope_depth  # scope depth
@@ -90,15 +77,18 @@ class SymbolTable():
     def get_size(self, dtype):
         raise Exception('TODO')
 
-    def add_var(self, name, vtype):
-        if self.cur_scope().lookup_var(name):
+    def add_var(self, name, vtype, is_static = False):
+        scope = self.global_scope if is_static else self.cur_scope()
+        if scope.lookup_var(name):
             compilation_err.append('Redeclaration of variable named {}'.format(name))
+            return
 
-        self.cur_scope().variables[name] = vtype
+        scope.variables[name] = vtype
 
     def add_struct(self, name, struct_type):
         if self.cur_scope().lookup_struct(name):
             compilation_err.append('Redeclaration of struct named {}'.format(name))
+            return
 
         self.cur_scope().structs[name] = struct_type
 
@@ -107,5 +97,10 @@ class SymbolTable():
         
     def add_func(self, func) -> None:
         if func.name in self.function:
-            raise Exception('conflicting name function addition')        
+            compilation_err.append('Redeclaration of function named {}'.format(func.name))
+            return
+                
         self.function[func.name] = func
+
+symtable = SymbolTable()
+compilation_err = []

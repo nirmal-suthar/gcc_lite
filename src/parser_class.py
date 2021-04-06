@@ -3,13 +3,9 @@ try:
 except:
     pass
 
-from CS335.gcc_lite.src.parser_debug import p_shift_expression
 from typing import Union, List
 import pydot
-# from helper import *
-
-symtable = SymbolTable()
-compilation_err = []
+from helper import *
 
 # #############################################################################
 # Type and scope related classes            
@@ -123,6 +119,9 @@ class BaseExpr(_BASENODE) :
         self.t_name = t_name
         self.attr_ignore.append('t_name')
 
+        # default type for error reporting
+        self.expr_type = VarType(0, 'int')
+
     ops_type = {
         # arithmetic operators
         '+' : ['int', 'float', 'char'],
@@ -192,47 +191,49 @@ class Const(BaseExpr):
         # self.get_type()
 
     def get_type(self):
-        if self.dvalue is 'int':
-            self._type = VarType(0, 'int')
-        elif self.dvalue is 'float':
-            self._type = VarType(0, 'float')
-        elif self.dvalue is 'char':
-            self._type = VarType(0, 'char')
-        elif self.dvalue is 'STRING_LITERAL':
-            self._type = VarType(1, 'char')
+        if self.dvalue == 'int':
+            self.expr_type = VarType(0, 'int')
+        elif self.dvalue == 'float':
+            self.expr_type = VarType(0, 'float')
+        elif self.dvalue == 'char':
+            self.expr_type = VarType(0, 'char')
+        elif self.dvalue == 'STRING_LITERAL':
+            self.expr_type = VarType(1, 'char')
         else:
-            raise Exception('Unknown Constant type')
+            compilation_err.append('Unknown Constant type')
 
 class Identifier(BaseExpr):
-    def __init__(self, ident):
+    def __init__(self, name: str):
         super().__init__("Identifier")
-        self.ident = ident
-        self.get_type()
+        self.name = name
+        # self.get_type()
 
     def get_type(self):
-        _var = symtable.lookup_var(self.ident)
+        _var = symtable.lookup_var(self.name)
         if _var is None:
             compilation_err.append('Undeclared Variable')
         else:
-            self._type = VarType(_var.ref_count, _var._type)
-        
+            self.expr_type = _var
 
 class OpExpr(BaseExpr):
-    def __init__(self, lhs, ops, rhs):
+    def __init__(
+        self, 
+        lhs: BaseExpr, 
+        ops: str, 
+        rhs: BaseExpr
+    ):
         super().__init__("Expression")
         self.lhs = lhs
         self.ops = ops
         self.rhs = rhs
-        self.get_type()
-
-        # lhs_type = get_expr_type(self.lhs)
-        # rhs_type = get_expr_type(self.rhs)
-        # if lhs_type not in operator_type[ops] or rhs_type not in operator_type[ops]:
-        #     print_compilation_error("Type mismatch error",lhs.lineno(0))
+        # self.get_type()
 
     def get_type(self):
         
-        if self.lhs._type._type is not self.ops_type[self.ops] and self.rhs._type._type is not self.ops_type[self.ops]:
+        if (
+            self.lhs.expr_type._type is not self.ops_type[self.ops] and
+            self.rhs.expr_type._type is not self.ops_type[self.ops]
+        ):
             compilation_err.append('Type not compatible with ops {}'.format(self.ops)) 
 
         if self.lhs._type.ref_count > 0:
@@ -279,15 +280,15 @@ class OpExpr(BaseExpr):
 class UnaryExpr(OpExpr):
     def __init__(self, ops, rhs):
         super().__init__(None, ops, rhs)
-        self.get_type()
+        # self.get_type()
 
 def get_type(self):
 
-        if self.ops is 'sizeof':
+        if self.ops == 'sizeof':
             inferred_type = 'int'
             ref_count = 0
         elif self.ops in ['--', '++', '+', '-']:
-            if self.rhs._type.ref_count is 0:
+            if self.rhs._type.ref_count == 0:
                 if self.rhs._type._type not in _BASENODE.ops_type[self.ops]:
                     compilation_err.append('Type not compatible with ops {}'.format(self.ops)) 
                 
@@ -311,7 +312,7 @@ def get_type(self):
                 compilation_err('RHS should be an indentifier')
 
             ref_count = self.rhs._type.ref_count \
-                + (1 if self.ops is '&' else -1)    
+                + (1 if self.ops == '&' else -1)    
             
             inferred_type = self.rhs._type._type
         
@@ -325,7 +326,7 @@ class PostfixExpr(OpExpr):
         
         # simple operation
         if self.ops in ['--', '++']:
-            if self.lhs._type.ref_count is 0:
+            if self.lhs._type.ref_count == 0:
                 if self.lhs._type._type not in _BASENODE.ops_type[self.ops]:
                     compilation_err.append('Type not compatible with ops {}'.format(self.ops)) 
                 
@@ -338,7 +339,7 @@ class PostfixExpr(OpExpr):
                 ref_count = self.lhs._type.ref_count
 
         # struct deference child 
-        elif self.ops is '.':
+        elif self.ops == '.':
             if isinstance(self.lhs._type._type, StructType):
                 struct_var = self.lhs._type._type.variables[self.rhs]
                 if struct_var is None:
@@ -348,7 +349,7 @@ class PostfixExpr(OpExpr):
             else:
                 compilation_err.append('Dereferencing invalid struct type')
         # function calling
-        elif self.ops is '(':
+        elif self.ops == '(':
             arg_list = [] if self.rhs is None else self.rhs
             # sanity checking of function args and 
             if isinstance(self.lhs, str):
@@ -366,7 +367,7 @@ class PostfixExpr(OpExpr):
             # set return type as type of function
             raise Exception('TODO')
         # array reference
-        elif self.ops is '[':
+        elif self.ops == '[':
             if self.rhs._type == VarType(0, 'int'):
                 if self.lhs._type.ref_count > 0:
                     inferred_type = self.lhs._type._type
@@ -417,46 +418,6 @@ class _BaseDecl(_BASENODE):
         self.t_name = 'TODO'
         self.attr_ignore.append('t_name')
     
-class Declaration(_BaseDecl):
-    def __init__(
-        self, 
-        specifier: DeclarationSpecifier, 
-        init_list: List[InitDeclarator] = []
-    ):
-        super().__init__('TODO')
-        self.specifier = specifier
-        self.init_list = init_list
-
-        _type = self.specifier.type_spec
-        storage_type = self.specifier.storage_type_spec
-
-        self.is_static = storage_type == 'static'
-        self.is_typedef = storage_type == 'typedef'
-        self.is_void = _type == 'void'
-        self.is_struct = _type is StructType
-
-        if self.is_typedef:
-            # TODO: store symbols as aliases of _type
-            raise Exception('not supported')
-
-        for init_decl in init_list:
-            decl = init_decl.declarator
-
-            vartype = VarType(decl.ref_count, _type, decl.arr_offset)
-
-            # Sanity checking of arr offset
-            if not all(map(lambda x: isinstance(x, Const) and x.dvalue=='int', decl.arr_offset)):
-                compilation_err.append('Only Int constant in array declaration')
-
-            if self.is_void and vartype.ref_count==0:
-                compilation_err.append('cannot assign variable of type void')
-            
-            # struct declaration checking
-            if self.is_struct and _type.is_defined() and vartype.ref_count==0:
-                compilation_err.append('storage of struct named {} not avaiable'.format(d_type.name))
-
-            # Add declaration in symtab
-            symtable.add_var(decl.name, vartype, self.is_static)
 
 class InitDeclarator(_BaseDecl):
     def __init__(self, declarator, initializer=None):
@@ -478,21 +439,6 @@ class Specifier(_BaseDecl):
         self.specifier_name = specifier_name
         self.attr_ignore.append('specifier_name')
 
-class DeclarationSpecifier(Specifier):
-    def __init__(
-        self, 
-        storage_type_spec, 
-        type_spec: Union[str, StructUnionSpecifier]
-    ):
-        super().__init__("Declaration Specifier")
-        self.storage_type_spec = storage_type_spec
-        self.type_spec = type_spec
-
-        if isinstance(self.type_spec, StructUnionSpecifier):
-            self.type_spec = self.type_spec.struct_type
-        elif isinstance(self.type_spec, Identifier):
-            raise Exception('Aliases not supported')
-
 class StructUnionSpecifier(Specifier):
     def __init__(
         self, 
@@ -504,19 +450,21 @@ class StructUnionSpecifier(Specifier):
         self.struct_union = struct_union
         self.name = name
         self.decls_list = decls_list
+        self.variables = None
 
-        # compute variables list of decls_list
-        self.compute_variables()
+        # compute variables list of decls_list if not None
+        if self.decls_list is not None:
+            self.compute_variables()
         
         # name and decls_list both given => add to symtable 
         # and check for redeclaration error 
         if self.decls_list is not None and self.name is not None:
-            struct_type = StructType(self.name, self.decls_list.variables)
+            struct_type = StructType(self.name, self.variables)
             symtable.add_struct(self.name, struct_type)
 
         # lambda structs => name in StructType None
         elif self.decls_list is not None and self.name is None:
-            struct_type = StructType(None, self.decls_list.variables)
+            struct_type = StructType(None, self.variables)
 
         # ony name given => try lookup struct in symtable, if not
         # found then give only name in hope it gets resolved later.
@@ -560,11 +508,25 @@ class StructUnionSpecifier(Specifier):
 
                 # Add declaration in variables
                 if decl.name in self.variables:
-                    compilation_err.append('Redeclaration of variable named {} inside struct'.format(name))
+                    compilation_err.append('Redeclaration of variable named {} inside struct'.format(decl.name))
 
-                self.variables[self.name] = vartype
+                self.variables[decl.name] = vartype
 
-                
+class DeclarationSpecifier(Specifier):
+    def __init__(
+        self, 
+        storage_type_spec, 
+        type_spec: Union[str, StructUnionSpecifier]
+    ):
+        super().__init__("Declaration Specifier")
+        self.storage_type_spec = storage_type_spec
+        self.type_spec = type_spec
+
+        if isinstance(self.type_spec, StructUnionSpecifier):
+            self.type_spec = self.type_spec.struct_type
+        elif isinstance(self.type_spec, Identifier):
+            raise Exception('Aliases not supported')
+
 class StructDeclaration(_BaseDecl):
     def __init__(
         self, 
@@ -601,12 +563,60 @@ class FuncDirectDecl(_BaseDecl):
         self, 
         ref_count: int, 
         name: str, 
-        param_list: List[ParamsDecl]
+        param_list: List[tuple]
     ):
         super().__init__('TODO')
         self.ref_count = ref_count
         self.name = name
         self.param_list = param_list
+
+class Declaration(_BaseDecl):
+    def __init__(
+        self, 
+        specifier: DeclarationSpecifier, 
+        init_list: List[InitDeclarator] = []
+    ):
+        super().__init__('TODO')
+        self.specifier = specifier
+        self.init_list = init_list
+
+        _type = self.specifier.type_spec
+        storage_type = self.specifier.storage_type_spec
+
+        self.is_static = storage_type == 'static'
+        self.is_typedef = storage_type == 'typedef'
+        self.is_void = _type == 'void'
+        self.is_struct = _type is StructType
+
+        if self.is_typedef:
+            # TODO: store symbols as aliases of _type
+            raise Exception('not supported')
+
+        for init_decl in self.init_list:
+
+            decl = init_decl.declarator
+
+            # Function declaration !
+            if isinstance(decl, FuncDirectDecl):    
+                vartype = VarType(decl.ref_count, _type)
+                symtable.add_func(Function(vartype, decl.name, decl.param_list))
+                continue
+
+            vartype = VarType(decl.ref_count, _type, decl.arr_offset)
+
+            # Sanity checking of arr offset
+            if not all(map(lambda x: isinstance(x, Const) and x.dvalue=='int', decl.arr_offset)):
+                compilation_err.append('Only Int constant in array declaration')
+
+            if self.is_void and vartype.ref_count==0:
+                compilation_err.append('cannot assign variable of type void')
+            
+            # struct declaration checking
+            if self.is_struct and _type.is_defined() and vartype.ref_count==0:
+                compilation_err.append('storage of struct named {} not avaiable'.format(_type.name))
+
+            # Add declaration in symtab
+            symtable.add_var(decl.name, vartype, self.is_static)
 
 # #############################################################################
 # Initializers            
@@ -719,22 +729,18 @@ class FuncDef(Node):
         specifier: DeclarationSpecifier, 
         ref_count: int, 
         name: str, 
-        args_list: List[ParamsDecl], 
+        param_list: List[tuple], 
         stmt: CompoundStmt
     ):
         super().__init__('Function Definition')
         self.specifier = specifier
         self.ref_count = ref_count
         self.name = name
-        self.args_list = args_list
+        self.param_list = param_list
         self.stmt = stmt
 
-        # check for conflicting name function
-        if symtable.lookup_func(name) is not None:
-            compilation_err.append("conflicting name of function")
-        else:
-            self.add_to_symtab()
+        self.add_to_symtab()
 
     def add_to_symtab(self):
-        vartype = VarType(self.ref_count, self.specifier)
-        symtable.add_func(Function(vartype, self.name, self.args_list))
+        vartype = VarType(self.ref_count, self.specifier.type_spec)
+        symtable.add_func(Function(vartype, self.name, self.param_list))
