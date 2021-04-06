@@ -9,6 +9,7 @@ from ply import yacc
 from lexer import lexer, tokens
 from parser_class import *
 
+
 class bcolors:
     HEADER = '\033[95m'
     OKBLUE = '\033[94m'
@@ -88,18 +89,30 @@ def p_error(p):
 # Expressions            
 # #############################################################################
 
-def p_constant(p):
+def p_constant_i(p):
     ''' constant : I_CONSTANT
-            | F_CONSTANT
-            | C_CONSTANT
-            | STRING_LITERAL
     '''
-    p[0] = Const(p[1], "dvalue") #FIXME: add appropriate dvalue string
+    p[0] = Const(p[1], "int")
+
+def p_constant_f(p):
+    ''' constant : F_CONSTANT
+    '''
+    p[0] = Const(p[1], "float")
+
+def p_constant_c(p):
+    ''' constant : C_CONSTANT
+    '''
+    p[0] = Const(p[1], "char")
+
+def p_constant_s(p):
+    ''' constant : STRING_LITERAL
+    '''
+    p[0] = Const(p[1], "STRING_LITERAL")
 
 def p_identifier(p):
     ''' identifier : IDENTIFIER
     '''
-    p[0] = Identifier(p[1])  
+    p[0] = Identifier(p[1])
 
 def p_primary_expression(p):
     ''' primary_expression : identifier
@@ -113,11 +126,6 @@ def p_primary_expression(p):
 
 def p_postfix_expression(p):
     ''' postfix_expression : primary_expression
-            | postfix_expression '[' expression ']'
-            | postfix_expression '(' ')'
-            | postfix_expression '(' argument_expression_list ')'
-            | postfix_expression '.' IDENTIFIER
-            | postfix_expression PTR_OP IDENTIFIER
             | postfix_expression INC_OP
             | postfix_expression DEC_OP
     '''
@@ -125,8 +133,26 @@ def p_postfix_expression(p):
         p[0] = p[1]
     elif len(p)==3:
         p[0] = PostfixExpr(p[1], p[2])
+
+def p_postfix_expression_arr(p):
+    ''' postfix_expression : postfix_expression '[' expression ']'
+    '''
+    p[0] = PostfixExpr(p[1], '[', p[3])
+
+def p_postfix_expression_call(p):
+    ''' postfix_expression : postfix_expression '(' ')'
+            | postfix_expression '(' argument_expression_list ')'
+    '''
+    if len(p) == 4:
+        p[0] = PostfixExpr(p[1], '(', None)
     else:
-        p[0] = PostfixExpr(p[1], tuple(p[2:]))
+        p[0] = PostfixExpr(p[1], '(', p[3])
+
+def p_postfix_expression_ptr(p):
+    ''' postfix_expression : postfix_expression '.' IDENTIFIER
+            | postfix_expression PTR_OP IDENTIFIER
+    '''
+    p[0] = PostfixExpr(p[1], p[2], p[3])
 
 def p_argument_expression_list(p):
     ''' argument_expression_list : assignment_expression
@@ -288,7 +314,7 @@ def p_assignment_expression(p):
     if len(p)==2:
         p[0] = p[1]
     else:
-        p[0] = AssignExpr(p[1], p[3], p[5])
+        p[0] = AssignExpr(p[1], p[2], p[3])
 
 def p_assignment_operator(p):
     ''' assignment_operator : '='
@@ -332,8 +358,8 @@ def p_declaration(p):
     ''' declaration	: declaration_specifiers ';'
 	        | declaration_specifiers init_declarator_list ';'
     '''
-    if len(p) == 2:
-        p[0] = Declaration(p[1], None)
+    if len(p) == 3:
+        p[0] = Declaration(p[1], [])
     else:
         p[0] = Declaration(p[1], p[2])
 
@@ -359,6 +385,7 @@ def p_init_declarator_list(p):
 def p_init_declarator(p):
     ''' init_declarator : declarator
             | declarator '=' initializer
+            | function_declarator
     '''
     if len(p) == 2:
         p[0] = InitDeclarator(p[1])
@@ -370,7 +397,6 @@ def p_storage_class_specifier(p):
         | STATIC
     '''
     p[0] = p[1]
-    # p[0] = StorageSpecifier(p[1])
 
 def p_type_specifier(p):
     ''' type_specifier : VOID
@@ -381,7 +407,6 @@ def p_type_specifier(p):
             | TYPE_NAME
     '''
     p[0] = p[1]
-    # p[0] = TypeSpecifier(p[1])
 
 def p_struct_or_union_specifier(p):
     ''' struct_or_union_specifier : struct_or_union IDENTIFIER '{' struct_declaration_list '}'
@@ -397,7 +422,6 @@ def p_struct_or_union_specifier(p):
 
 def p_struct_or_union(p):
     ''' struct_or_union : STRUCT
-            | UNION
     '''
     p[0] = p[1]
 
@@ -411,14 +435,18 @@ def p_struct_declaration_list(p):
         p[0] = p[1] + [p[2]]
 
 def p_struct_declaration(p):
-    ''' struct_declaration : specifier_qualifier_list struct_declarator_list ';'
+    ''' struct_declaration : specifier_qualifier_list ';'
+        | specifier_qualifier_list struct_declarator_list ';'
     '''
-    p[0] = StructDeclaration(p[1], p[2])
+    if len(p) == 3:
+        p[0] = StructDeclaration(p[1], [])
+    else:
+        p[0] = StructDeclaration(p[1], p[2])
 
 def p_specifier_qualifier_list(p):
     ''' specifier_qualifier_list : type_specifier
     '''
-    p[0] = p[1]
+    p[0] = DeclarationSpecifier(None, p[1])
 
 def p_struct_declarator_list(p):
     ''' struct_declarator_list : struct_declarator
@@ -430,65 +458,57 @@ def p_struct_declarator_list(p):
         p[0] = p[1] + [p[3]]
 
 def p_struct_declarator(p):
-    ''' struct_declarator : declarator ':' constant_expression
+    ''' struct_declarator : declarator
+        |   declarator ':' constant_expression
     '''
-    p[0] = ['struct_declarator'] + p[1:]
-    pass
 
-# def p_enum_specifier(p):
-#     ''' enum_specifier : ENUM '{' enumerator_list '}'
-#             | ENUM IDENTIFIER '{' enumerator_list '}'
-#             | ENUM IDENTIFIER
-#     '''
-#     p[0] = ['enum_specifier'] + p[1:]
-#     pass
-
-# def p_enumerator_list(p):
-#     ''' enumerator_list : enumerator
-#             | enumerator_list ',' enumerator
-#     '''
-#     p[0] = ['enumerator_list'] + p[1:]
-#     pass
-
-# def p_enumerator(p):
-#     ''' enumerator : IDENTIFIER
-#             | IDENTIFIER '=' constant_expression
-#     '''
-#     p[0] = ['enumerator'] + p[1:]
-#     pass
-
-# def p_type_qualifier(p):
-#     ''' type_qualifier : CONST
-#             | VOLATILE
-#     '''
-#     p[0] = ['type_qualifier'] + p[1:]
-#     pass
+    if len(p) == 2:
+        p[0] = StructDeclarator(p[1])
+    else:
+        p[0] = StructDeclarator(p[1], p[3])
 
 def p_declarator(p):
     ''' declarator : pointer direct_declarator
             | direct_declarator
     '''
     if len(p) == 2:
-        p[0] = Declarator(0, p[1])
+        (rcount, ident, args) = p[1]
+        p[0] = Declarator(rcount, ident, args)
     else:
-        p[0] = Declarator(p[1], p[2])
-
-def p_direct_declarator_0(p):
-    ''' direct_declarator : IDENTIFIER
-            | '(' declarator ')'
-    '''
-    if len(p) == 2:
-        p[0] = p[1]
-    else:
-        p[0] = p[2]
+        (rcount, ident, args) = p[2]
+        p[0] = Declarator(p[1]+rcount, ident, args)
 
 def p_direct_declarator(p):
-    ''' direct_declarator : direct_declarator '[' constant_expression ']'
-            | direct_declarator '[' ']'
-            | direct_declarator '(' parameter_type_list ')'
-            | direct_declarator '(' ')'
+    ''' direct_declarator : IDENTIFIER
+            | '(' declarator ')'
+            | direct_declarator '[' constant_expression ']'
     '''
-    p[0] = DirectDecl(p[1], p[2:])
+    if len(p) == 2:
+        p[0] = (0,p[1],[])
+    elif len(p) == 4:
+        p[0] = (p[2].ref_count, p[2].name, p[2].arr_offset)
+    else:
+        (rcount, ident, args) = p[1]
+        p[0] = (rcount, ident, args+[p[3]])
+
+def p_param_list(p):
+    ''' param_list : '(' parameter_type_list ')'
+            | '(' ')'
+    '''
+    if len(p) == 2:
+        p[0] = []
+    else:
+        p[0] = p[2]  
+
+def p_function_declarator(p):
+    ''' function_declarator : IDENTIFIER '(' parameter_type_list ')'
+            | pointer IDENTIFIER '(' parameter_type_list ')'
+    '''
+    if len(p)==5:
+        p[0] = FuncDirectDecl(0, p[1], p[3])
+    else:
+        p[0] = FuncDirectDecl(p[1], p[2], p[4])
+        
 
 def p_pointer(p):
     ''' pointer : '*'
@@ -499,13 +519,6 @@ def p_pointer(p):
     else:
         p[0] = p[2]+1
 
-# def p_type_qualifier_list(p):
-#     ''' type_qualifier_list : type_qualifier
-#             | type_qualifier_list type_qualifier
-#     '''
-#     p[0] = ['type_qualifier_list'] + p[1:]
-#     pass
-
 def p_parameter_type_list(p):
     ''' parameter_type_list : parameter_list
             | parameter_list ',' ELLIPSIS
@@ -513,7 +526,7 @@ def p_parameter_type_list(p):
     if len(p) == 2:
         p[0] = p[1]
     else:
-        p[0] = p[1] + [p[3]]
+        p[0] = p[1] + [(p[3],None)]
 
 def p_parameter_list(p):
     ''' parameter_list : parameter_declaration
@@ -525,30 +538,21 @@ def p_parameter_list(p):
         p[0] = p[1] + [p[3]]
 
 def p_parameter_declaration(p):
-    ''' parameter_declaration : declaration_specifiers declarator
-            | declaration_specifiers abstract_declarator
-            | declaration_specifiers
+    '''parameter_declaration : declaration_specifiers declarator
     '''
-    if len(p) == 2:
-        p[0] = ParamsDecl(p[1])
-    else:
-        p[0] = ParamsDecl(p[1], p[2])
-
-# def p_identifier_list(p):
-#     ''' identifier_list : IDENTIFIER
-#             | identifier_list ',' IDENTIFIER
-#     '''
-#     p[0] = ['identifier_list'] + p[1:]
-#     pass
+    _type = VarType(p[2].ref_count, p[1].type_spec, p[2].arr_offset)
+    p[0] = (p[2].name, _type)
 
 def p_type_name(p):
     ''' type_name : specifier_qualifier_list
             | specifier_qualifier_list abstract_declarator
     '''
+    _type = p[1].type_spec
     if len(p) == 2:
-        p[0] = TypeName(p[1])
+        p[0] = VarType(0, _type, None)
     else:
-        p[0] = TypeName(p[1], p[2])
+        (rcount, arr_dim) = p[2]
+        p[0] = VarType(rcount, _type, arr_dim)
 
 def p_abstract_declarator(p):
     ''' abstract_declarator : pointer
@@ -556,60 +560,22 @@ def p_abstract_declarator(p):
             | pointer direct_abstract_declarator
     '''
     if len(p) == 2:
-        if isinstance(p[1], DirectAbsDecl):
-            p[0] = AbsDecl(direct_abs_decl=p[1])
+        if isinstance(p[1], int):
+            p[0] = (p[1], [])
         else:
-            p[0] = AbsDecl(ref_count=p[1])
+            p[0] = (0, p[1])
     else:
-        p[0] = AbsDecl(ref_count=p[1], direct_abs_decl=p[2])
+        p[0] = (p[1], p[2])
 
-
-def p_direct_abstract_declarator_0(p):
-    ''' direct_abstract_declarator : '(' abstract_declarator ')'
-    '''
-    p[0] = DirectAbsDecl(decl=p[1])
-
-def p_direct_abstract_declarator_1(p):
-    ''' direct_abstract_declarator : '[' ']'
-            | '[' constant_expression ']'
-            | direct_abstract_declarator '[' ']'
+def p_direct_abstract_declarator(p):
+    ''' direct_abstract_declarator : '[' constant_expression ']'
             | direct_abstract_declarator '[' constant_expression ']'
     '''
-    decl = None
-    abs_type = '['
-    abs_args = None
-
-    if len(p) == 3:
-        if isinstance(p[1], DirectAbsDecl):
-            decl = p[1]
-        else:
-            abs_args = p[2]
+    if len(p) == 4:
+        p[0] = [p[2]]
     else:
-        decl = p[1]
-        abs_args = p[3]
+        p[0] = p[1] + [p[3]]
 
-    p[0] = DirectAbsDecl(decl=decl, abs_type=abs_type, abs_args=abs_args)
-
-def p_direct_abstract_declarator_2(p):
-    ''' direct_abstract_declarator : '(' ')'
-            | '(' parameter_type_list ')'
-            | direct_abstract_declarator '(' ')'
-            | direct_abstract_declarator '(' parameter_type_list ')'
-    '''
-    decl = None
-    abs_type = '('
-    abs_args = None
-
-    if len(p) == 3:
-        if isinstance(p[1], DirectAbsDecl):
-            decl = p[1]
-        else:
-            abs_args = p[2]
-    else:
-        decl = p[1]
-        abs_args = p[3]
-
-    p[0] = DirectAbsDecl(decl=decl, abs_type=abs_type, abs_args=abs_args)
 
 # #############################################################################
 # Initializers            
@@ -649,8 +615,7 @@ def p_statement(p):
     p[0] = p[1]
 
 def p_labeled_statement(p):
-    ''' labeled_statement : IDENTIFIER ':' statement
-            | CASE constant_expression ':' statement
+    ''' labeled_statement : CASE constant_expression ':' statement
             | DEFAULT ':' statement
     '''
     if len(p)==4:
@@ -730,8 +695,7 @@ def p_iteration_statement(p):
         p[0] = IterStmt(p[1], (p[3](),p[4](),p[5]), p[8]) 
 
 def p_jump_statement(p):
-    ''' jump_statement : GOTO IDENTIFIER ';'
-            | CONTINUE ';'
+    ''' jump_statement : CONTINUE ';'
             | BREAK ';'
             | RETURN ';'
             | RETURN expression ';'
@@ -761,9 +725,14 @@ def p_external_declaration(p):
     p[0] = p[1]
 
 def p_function_definition(p):
-    ''' function_definition : declaration_specifiers declarator func_scope compound_statement
+    ''' function_definition : declaration_specifiers IDENTIFIER param_list func_scope compound_statement
+        | declaration_specifiers pointer IDENTIFIER param_list func_scope compound_statement
     '''
-    p[0] = FuncDef(p[1], p[2], p[4])
+    if len(p) == 6:
+        p[0] = FuncDef(p[1], 0, p[2], p[3], p[5])
+    else:
+        p[0] = FuncDef(p[1], p[2], p[3], p[4], p[6])
+
 
 # def _parse(ifile):
 #         symtable = SymbolTable()
@@ -778,5 +747,5 @@ def p_function_definition(p):
 #         return parser.parse(ifile)
 
 # if __name__ == '__main__':
-symtable = SymbolTable()
+
 parser = yacc.yacc()
