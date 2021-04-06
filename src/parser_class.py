@@ -156,13 +156,13 @@ class Const(BaseExpr):
 
     def get_type(self):
         if self.dvalue is 'I_CONSTANT':
-            self._type = VarType('int',0)
+            self._type = VarType(0, 'int')
         elif self.dvalue is 'F_CONSTANT':
-            self._type = VarType('float',0)
+            self._type = VarType(0, 'float')
         elif self.dvalue is 'C_CONSTANT':
-            self._type = VarType('char', 0)
+            self._type = VarType(0, 'char')
         elif self.dvalue is 'STRING_LITERAL':
-            self._type = VarType('char', 1)
+            self._type = VarType(1, 'char')
         else:
             raise Exception('Unknown Constant type')
 
@@ -177,7 +177,7 @@ class Identifier(BaseExpr):
         if _var is None:
             compilation_err.append('Undeclared Variable')
         else:
-            self._type = VarType(_var._type, _var.ref_count)
+            self._type = VarType(_var.ref_count, _var._type)
         
 
 class OpExpr(BaseExpr):
@@ -193,29 +193,29 @@ class OpExpr(BaseExpr):
         # if lhs_type not in operator_type[ops] or rhs_type not in operator_type[ops]:
         #     print_compilation_error("Type mismatch error",lhs.lineno(0))
 
-        def get_type(self):
-            
-            if not lhs._type._type is _BASENODE.ops_type[ops] and rhs._type._type is _BASENODE.ops_type[ops]:
-                compilation_err.append('Type not compatible with ops {}'.format(self.ops)) 
+    def get_type(self):
+        
+        if not self.lhs._type._type is _BASENODE.ops_type[ops] and self.rhs._type._type is _BASENODE.ops_type[ops]:
+            compilation_err.append('Type not compatible with ops {}'.format(self.ops)) 
 
-            if self.ops in ['||', '&&', '|', '^', '&', '==',
-                '!=', '<', '>', '<=', '>=', '>>', '<<', '+', 
-                '-', '*', '/', '%'
-            ]:
-                inferred_type = 'int'
-                ref_count = 0
-                self._type = VarType(0,'int')
-            elif lhs._type.ref_count is 0 and rhs._type.ref_count is 0:
-                ref_count, inferred_type = 'int' #TODO:
-                self._type = VarType(ref_count, inferred_type)
-            else:
-                raise Exception('TODO')
+        if self.ops in ['||', '&&', '|', '^', '&', '==',
+            '!=', '<', '>', '<=', '>=', '>>', '<<', '+', 
+            '-', '*', '/', '%'
+        ]:
+            inferred_type = 'int'
+            ref_count = 0
+            self._type = VarType(0,'int')
+        elif self.lhs._type.ref_count is 0 and self.rhs._type.ref_count is 0:
+            ref_count, inferred_type = 'int' #TODO:
+            self._type = VarType(ref_count, inferred_type)
+        else:
+            raise Exception('TODO')
 
-            if lhs._type._type is not inferred_type:
-                self.lhs = CastExpr(inferred_type, self.lhs)
-                self.rhs = CastExpr(inferred_type, self.rhs)
+        if self.lhs._type._type is not inferred_type:
+            self.lhs = CastExpr(inferred_type, self.lhs)
+            self.rhs = CastExpr(inferred_type, self.rhs)
 
-            self._type(ref_count, inferred_type)
+        self._type(ref_count, inferred_type)
 
 class UnaryExpr(OpExpr):
     def __init__(self, ops, rhs):
@@ -241,7 +241,7 @@ class UnaryExpr(OpExpr):
         elif self.ops in ['!', '~']:
             if self.rhs._type._type not in _BASENODE.ops_type[self.ops]:
                 compilation_err.append('Type not compatible with ops {}'.format(self.ops)) 
-             
+            
             inferred_type = 'int'
             ref_count = 0
         else:
@@ -256,8 +256,8 @@ class UnaryExpr(OpExpr):
         self._type = VarType(ref_count, inferred_type)
 
 class PostfixExpr(OpExpr):
-    def __init__(self, lhs, *ops):
-        super().__init__(lhs, ops, None)
+    def __init__(self, lhs, ops, rhs=None):
+        super().__init__(lhs, ops, rhs)
 
     def get_type(self):
         
@@ -271,25 +271,32 @@ class PostfixExpr(OpExpr):
                 ref_count = 0
 
             else:
-                raise Exception('TODO') 
+                # pointer increment operation which returns the same type
+                inferred_type = self.lhs._type._type
+                ref_count = self.lhs._type.ref_count
 
-        # struct child
-        elif self.ops[0] is '.':
-            raise Exception('TODO')
         # struct deference child 
-        elif self.ops[0] is '.':
-            raise Exception('TODO')
+        elif self.ops is '.':
+            if isinstance(self.lhs._type, StructType):
+                # get symbol corresponding to rhs and return its type
+            else:
+                compilation_err.append('Dereferencing invalid struct type')
         # function calling
-        elif self.ops[0] is '(':
-            arg_list = [] if len(self.ops) is 2 else self.ops[1]
+        elif self.ops is '(':
+            arg_list = [] if self.rhs is None else self.rhs
             # sanity checking of function args and 
             # set return type as type of function
             raise Exception('TODO')
         # array reference
-        elif self.ops[0]:
-            # sanity checking that const_exp is 'int' and 
-            # set return type as type of function
-            raise Exception('TODO')
+        elif self.ops is '[':
+            if self.rhs._type == VarType(0, 'int'):
+                if self.lhs._type.ref_count > 0:
+                    inferred_type = self.lhs._type._type
+                    ref_count = self.lhs._type.ref_count - 1
+                else:
+                    compilation_err.append('Subscripted value is neither array nor pointer')
+            else:
+                compilation_err.append('Array subscript is not an integer')
             
 class CastExpr(BaseExpr):
     def __init__(self, _type, Expr):
@@ -341,6 +348,12 @@ class Declaration(_BaseDecl):
         # NOTE: handling storage_spec is remaing here
         _type = self.specifier.type_spec
 
+        storage_type = self.specifier.storage_type_spec
+        if storage_type == 'static':
+            # store in global symbol table
+        elif storage_type == 'typedef':
+            # store symbols as aliases of _type
+
         for init_decl in init_list:
             decl = init_decl.declarator
 
@@ -355,15 +368,6 @@ class Declaration(_BaseDecl):
 
             # Add declaration in symtab
             symtable.add_var(decl.name, vartype)
-
-
-# class InitDeclaratorList():
-#     def __init__(self, *init_expr):
-#         self.init_list = init_expr
-
-#     def add_init_expr(self, expr):
-#         self.init_list.append(expr)    
-#     # dot print all
 
 class InitDeclarator(_BaseDecl):
     def __init__(self, declarator, initializer=None):
@@ -396,15 +400,10 @@ class DeclarationSpecifier(Specifier):
         elif isinstance(self.type_spec, Identifier):
             raise Exception('Aliases not supported')
 
-# class StorageSpecifier(Specifier):
-#     def __init__(self, spec):
-#         super().__init__("Storage Specifier")
-#         self.spec = spec
-# 
-# class TypeSpecifier(Specifier):
-#     def __init__(self, type_name):
-#         super().__init__("Type Specifier")
-#         self.type_name = type_name # type_name can be a Struct Union Specifier
+class StructType:
+    def __init__(self, decl_list):
+        self.decl_list = decl_list
+
 
 class StructUnionSpecifier(Specifier):
     def __init__(self, struct_union, name=None, decls_list=None):
@@ -434,8 +433,8 @@ class StructUnionSpecifier(Specifier):
         self.struct_type = struct_type
 
     def add_to_symtab(self):
-        stype = StructType(self.name, self.decls_list)
-        symtable.add_struct(stype)
+        stype = StructType(self.decls_list)
+        symtable.add_struct(self.name, stype)
 
 
 class StructDeclaration(Declaration):

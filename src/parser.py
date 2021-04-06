@@ -88,13 +88,25 @@ def p_error(p):
 # Expressions            
 # #############################################################################
 
-def p_constant(p):
+def p_constant_i(p):
     ''' constant : I_CONSTANT
-            | F_CONSTANT
-            | C_CONSTANT
-            | STRING_LITERAL
     '''
-    p[0] = Const(p[1], "dvalue") #FIXME: add appropriate dvalue string
+    p[0] = Const(p[1], "I_CONSTANT")
+
+def p_constant_f(p):
+    ''' constant : F_CONSTANT
+    '''
+    p[0] = Const(p[1], "F_CONSTANT")
+
+def p_constant_c(p):
+    ''' constant : C_CONSTANT
+    '''
+    p[0] = Const(p[1], "C_CONSTANT")
+
+def p_constant_s(p):
+    ''' constant : STRING_LITERAL
+    '''
+    p[0] = Const(p[1], "STRING_LITERAL")
 
 def p_identifier(p):
     ''' identifier : IDENTIFIER
@@ -113,11 +125,6 @@ def p_primary_expression(p):
 
 def p_postfix_expression(p):
     ''' postfix_expression : primary_expression
-            | postfix_expression '[' expression ']'
-            | postfix_expression '(' ')'
-            | postfix_expression '(' argument_expression_list ')'
-            | postfix_expression '.' IDENTIFIER
-            | postfix_expression PTR_OP IDENTIFIER
             | postfix_expression INC_OP
             | postfix_expression DEC_OP
     '''
@@ -125,8 +132,26 @@ def p_postfix_expression(p):
         p[0] = p[1]
     elif len(p)==3:
         p[0] = PostfixExpr(p[1], p[2])
+
+def p_postfix_expression_arr(p):
+    ''' postfix_expression : postfix_expression '[' expression ']'
+    '''
+    p[0] = PostfixExpr(p[1], '[', p[3])
+
+def p_postfix_expression_call(p):
+    ''' postfix_expression : postfix_expression '(' ')'
+            | postfix_expression '(' argument_expression_list ')'
+    '''
+    if len(p) == 4:
+        p[0] = PostfixExpr(p[1], '(', None)
     else:
-        p[0] = PostfixExpr(p[1], tuple(p[2:]))
+        p[0] = PostfixExpr(p[1], '(', p[3])
+
+def p_postfix_expression_ptr(p):
+    ''' postfix_expression : postfix_expression '.' IDENTIFIER
+            | postfix_expression PTR_OP IDENTIFIER
+    '''
+    p[0] = PostfixExpr(p[1], p[2], p[3])
 
 def p_argument_expression_list(p):
     ''' argument_expression_list : assignment_expression
