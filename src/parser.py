@@ -507,7 +507,7 @@ def p_param_list(p):
     ''' param_list : '(' parameter_type_list ')'
             | '(' ')'
     '''
-    if len(p) == 2:
+    if len(p) == 3:
         p[0] = []
     else:
         p[0] = p[2]  

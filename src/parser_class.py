@@ -3,16 +3,75 @@ try:
 except:
     pass
 
+from os import removedirs
 from typing import Union, List
 import pydot
 from helper import *
 
 # #############################################################################
+# Misc.            
+# #############################################################################
+
+class _BASENODE:
+    def __init__(self):
+        self.attr_ignore = ['attr_ignore']
+
+    @staticmethod
+    def _gen_dot(obj):
+        """Get a list of node and edge declarations."""
+
+        dot_list = []
+
+        if isinstance(obj, (str, int, float, tuple, dict)):
+            dot_list.append(obj)
+        elif isinstance(obj, _BASENODE):
+            dot_list.append(repr(obj.__class__.__name__))
+        elif isinstance(obj, list):
+            # dot_list.append('List')
+            pass
+        else:
+            raise Exception('Invalid type {}'.format(type(obj)))
+        
+        if isinstance(obj, list):
+            # Avoid None child node, empty strings, and empty lists
+            FILTERED_LIST = [None, "", []]    
+
+            for child in filter(lambda x: not x in FILTERED_LIST, obj):
+                _gen_dot_func = obj._gen_dot if isinstance(obj, _BASENODE) else _BASENODE._gen_dot
+                dot_list.append(_gen_dot_func(child))                
+
+        elif isinstance(obj, _BASENODE):
+            for attr in obj.__dict__:
+                child = getattr(obj, attr)
+                if (
+                    child is None
+                    or child == ""
+                    or child == []
+                    or attr in obj.attr_ignore
+                ):
+                    continue
+                
+                child_list = [] 
+                if isinstance(child, list):
+                    child_list.append(repr(attr))
+
+                _gen_dot_func = obj._gen_dot if isinstance(obj, _BASENODE) else _BASENODE._gen_dot
+                child_list = child_list + _gen_dot_func(child)
+
+                if len(child_list) == 1:
+                    dot_list.append(child_list[0])
+                else:
+                    dot_list.append(child_list)
+                
+        return dot_list
+
+# #############################################################################
 # Type and scope related classes            
 # #############################################################################
 
-class StructType:
+class StructType(_BASENODE):
     def __init__(self, name=None, variables=None):
+        super().__init__()
         # For use in named struct decls which are not 
         # yet defined
         self.name = name
@@ -30,87 +89,24 @@ class StructType:
     def _get_size(self):
         raise Exception('TODO')
 
-class Function:
+class Function(_BASENODE):
     def __init__(self, ret_type, name, args):
+        super().__init__()
         self.ret_type = ret_type    # should be VarType
         self.name = name            # str
         self.args = args            # list
 
-class VarType:
+class VarType(_BASENODE):
     def __init__(self, ref_count, _type, arr_offset=None):
+        super().__init__()
         self.ref_count = ref_count
         self._type = _type
         self.arr_offset = arr_offset
 
 class ScopeName:
     def __init__(self, name):
+        super().__init__()
         self.name = name
-
-# #############################################################################
-# Misc.            
-# #############################################################################
-
-class _BASENODE():
-    def __init__(self):
-        self.attr_ignore = ['attr_ignore']
-
-    @staticmethod
-    def _gen_dot(graph, obj, node_idx):
-        """Get a list of node and edge declarations."""
-
-        if isinstance(obj, _BASENODE):
-            graph.add_node(pydot.Node(node_idx, label=obj.__class__.__name__, shape='egg'))
-        elif isinstance(obj, list):
-            pass
-        # if isinstance(obj, (str, int, float, tuple)):
-        else:
-            graph.add_node(pydot.Node(node_idx, label=repr(obj), shape='house', style='filled', color='yellowgreen'))
-        # else:
-        #     raise Exception('Invalid type {}'.format(type(obj)))
-        
-        cur_idx = node_idx
-
-        if isinstance(obj, list):
-            
-            for child in obj:
-                # Avoid None child node, empty strings, and empty lists
-                if (
-                    child is None
-                    or child == ""
-                    or child == []
-                ):
-                    continue
-                
-                # _gen_dot_func = obj._gen_dot if isinstance(obj, _BASENODE) else _BASENODE._gen_dot
-                _gen_dot_func = _BASENODE._gen_dot
-
-                graph.add_edge(pydot.Edge(node_idx, cur_idx+1))
-                cur_idx = _gen_dot_func(graph, child, cur_idx+1)                
-
-        elif isinstance(obj, _BASENODE):
-            for attr in obj.__dict__:
-                child = getattr(obj, attr)
-                if (
-                    child is None
-                    or child == ""
-                    or child == []
-                    or attr in obj.attr_ignore
-                ):
-                    continue
-                
-                graph.add_edge(pydot.Edge(node_idx, cur_idx+1))
-                
-                if isinstance(child, list):
-                    graph.add_node(pydot.Node(cur_idx+1, label=attr, shape='egg'))
-
-                # _gen_dot_func = obj._gen_dot if isinstance(obj, _BASENODE) else _BASENODE._gen_dot
-                _gen_dot_func = _BASENODE._gen_dot
-                
-                cur_idx = _gen_dot_func(graph, child, cur_idx+1)                
-                
-        return cur_idx
-
-
 
 # #############################################################################
 # Expressions            
@@ -686,6 +682,10 @@ class Declaration(_BaseDecl):
 
             # Add declaration in symtab
             symtable.add_var(decl.name, vartype, self.is_static)
+    @staticmethod
+    def _gen_dot(obj):
+        """Get a list of node and edge declarations."""
+        return []
 
 # #############################################################################
 # Initializers            
@@ -763,34 +763,65 @@ class Start(Node):
         self.units = units
         # self.dot_attr = {'Start': self.units}
 
-    # @staticmethod
-    # def _gen_dot(graph, obj, node_idx):
-    #     """Get a list of node and edge declarations."""
+    @staticmethod
+    def _gen_dot(obj):
+        """Get a list of node and edge declarations."""
 
-    #     graph.add_node(pydot.Node(node_idx, label=obj.__class__.__name__, 
-    #             shape='doubleoctagon', color='orange', style='filled'
-    #         )
-    #     )
-    #     cur_idx = node_idx
-            
-    #     for child in obj.units:
-    #         # Avoid None child node, empty strings, and empty lists
-    #         if (
-    #             child is None
-    #             or child == ""
-    #             or child == []
-    #         ):
-    #             continue
-            
-    #         graph.add_edge(pydot.Edge(node_idx, cur_idx+1))
-    #         cur_idx = child._gen_dot(graph, child, cur_idx+1)                
+        dot_list = ['Start']
+
+        # Avoid None child node, empty strings, and empty lists
+        FILTERED_LIST = [None, "", []]    
+
+        for child in filter(lambda x: not x in FILTERED_LIST, obj.units):         
+          dot_list.append(child._gen_dot(child))                
                 
-    #     return cur_idx
+        return dot_list
 
     def gen_dot(self, graph, node_idx=0):
         """Get a list of node and edge declarations."""
-        self._gen_dot(graph, self, node_idx)
-        print('Dot graph generated')
+
+        def remove_redundancy(tree):
+            newList = tree[:1]
+
+            for child in tree[1:]:
+                if type(child) is list:
+                    child = remove_redundancy(child)
+                    if child != []:
+                        newList.append(child)
+                elif type(child) is str:
+                    newList.append(child)
+                # else:
+                #     raise Exception('remove: Invalid type {}'.format(type(child)))
+                
+            # if len(newList) == 1:
+            #     return []
+            # if len(newList) == 2:
+            #     return newList[1]
+            
+            return newList
+
+        def generate_dot(graph, tree, node_idx):
+            """ Node and edge declarations."""
+            if type(tree) is str:
+                graph.add_node(pydot.Node(node_idx, label=repr(tree), shape='house', style='filled', color='yellowgreen'))
+                return node_idx
+            elif type(tree) is list:
+                graph.add_node(pydot.Node(node_idx, label=repr(tree[0]), shape='egg'))
+                cur_idx = node_idx
+                for child in tree[1:]:
+                    if child == []:
+                        continue
+                    graph.add_edge(pydot.Edge(node_idx, cur_idx+1))
+                    cur_idx = generate_dot(graph, child, cur_idx+1)
+                return cur_idx
+            else:
+                raise Exception('Invalid type {}'.format(type(tree)))
+
+        tree = self._gen_dot(self)
+        AST = remove_redundancy(tree)
+        generate_dot(graph, AST, node_idx)
+        return AST
+
 
 class FuncDef(Node):
     def __init__(
@@ -807,9 +838,25 @@ class FuncDef(Node):
         self.name = name
         self.param_list = param_list
         self.stmt = stmt
+        self.vartype = VarType(self.ref_count, self.specifier.type_spec)
+        symtable.add_func(Function(self.vartype, self.name, self.param_list))
 
-        self.add_to_symtab()
+    @staticmethod
+    def _gen_dot(obj):
+        """Get a list of node and edge declarations."""
 
-    def add_to_symtab(self):
-        vartype = VarType(self.ref_count, self.specifier.type_spec)
-        symtable.add_func(Function(vartype, self.name, self.param_list))
+        dot_list = ['FuncDef']
+
+        # ret_type
+        dot_list.append(obj.vartype._gen_dot(obj.vartype))                
+
+        # func name
+        dot_list.append(repr(obj.name))
+
+        # param list
+        dot_list.append(_BASENODE._gen_dot(obj.param_list))                
+
+        # compound stmt
+        dot_list.append(obj.stmt._gen_dot(obj.stmt))                
+    
+        return dot_list
