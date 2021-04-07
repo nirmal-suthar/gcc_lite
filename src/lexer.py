@@ -5,6 +5,7 @@ from ply.lex import TOKEN
 from tabulate import tabulate
 import re
 import sys
+from helper import *
 
 keywords = {
     # 'asm':'ASM',
@@ -174,6 +175,19 @@ def t_RS_PAREN(t):
 @TOKEN(r'[a-zA-Z_][0-9a-zA-Z_]*')
 def t_IDENTIFIER(t):
     t.type = keywords.get(t.value, 'IDENTIFIER')
+
+    if t.type != 'IDENTIFIER':
+        return t
+
+    lookup_alias = symtable.lookup_alias(t.value)
+    if lookup_alias is None:
+        t.type = 'IDENTIFIER'
+    else:
+        t.type = 'TYPE_NAME'
+    
+    # TODO: sometimes lexer has large look ahead so token right after declaration are 
+    # returned as IDENTIFIER instead of TYPENAME
+
     return t
 
 # Constants

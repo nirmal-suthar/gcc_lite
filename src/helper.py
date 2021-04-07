@@ -20,9 +20,7 @@ class ScopeTable:
         # return self.parent.lookup_struct(name) if self.parent is not None else False
     
     def lookup_alias(self, name):
-        if name in self.aliases:
-            return True
-        return False
+        return self.aliases.get(name, None)
         # return self.parent.lookup_alias(name) if self.parent is not None else False
         
 class SymbolTable():
@@ -67,7 +65,7 @@ class SymbolTable():
         return None
 
     def lookup_alias(self, id):
-        raise Exception('TODO')
+        return self.cur_scope().lookup_alias(id)
 
     def lookup_func(self, name):
         if name in self.function:
@@ -93,7 +91,14 @@ class SymbolTable():
         self.cur_scope().structs[name] = struct_type
 
     def add_typedef(self, alias, actual):
-        raise Exception('TODO')
+        cur_scope = self.cur_scope()
+        lookup_alias = cur_scope.lookup_alias(alias)
+        if lookup_alias is None:
+            cur_scope.aliases[alias] = actual
+        elif lookup_alias == actual:
+            pass
+        else:
+            compilation_err.append('Redeclaration of type/alias named {}'.format(alias))
         
     def add_func(self, func) -> None:
         if func.name in self.function:

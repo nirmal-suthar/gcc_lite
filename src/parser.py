@@ -370,9 +370,11 @@ def p_declaration_specifiers(p):
     if len(p) == 2:
         p[0] = DeclarationSpecifier(None, p[1])
         p.type = p[1]
+        p.is_typedef = False
     else:
         p[0] = DeclarationSpecifier(p[1], p[2])
         p.type = p[2]
+        p.is_typedef = (p[1] == 'typedef')
 
 def p_init_declarator_list(p):
     ''' init_declarator_list : init_declarator
@@ -390,9 +392,9 @@ def p_init_declarator(p):
             | function_declarator
     '''
     if len(p) == 2:
-        p[0] = InitDeclarator(p[1])
+        p[0] = InitDeclarator(p[1], parser_type=p.type, is_typedef=p.is_typedef)
     else:
-        p[0] = InitDeclarator(p[1], p[3])
+        p[0] = InitDeclarator(p[1], p[3], parser_type=p.type, is_typedef=p.is_typedef)
 
 def p_storage_class_specifier(p):
     ''' storage_class_specifier : TYPEDEF
@@ -406,9 +408,17 @@ def p_type_specifier(p):
             | INT
             | FLOAT
             | struct_or_union_specifier
-            | TYPE_NAME
     '''
     p[0] = p[1]
+
+def p_type_specifier_typedef(p):
+    ''' type_specifier : TYPE_NAME
+    '''
+    p[0] = p[1]
+    lookup_alias = symtable.lookup_alias(p[1])
+    p.type = lookup_alias._type
+    
+    # TODO: handle typedef with pointer types e.g. typedef int *ab, **xyz (by using something like p.ref_type)
 
 def p_struct_or_union_specifier(p):
     ''' struct_or_union_specifier : struct_or_union IDENTIFIER '{' struct_declaration_list '}'
@@ -752,3 +762,4 @@ def p_function_definition(p):
 
 parser = yacc.yacc()
 parser.type = None
+parser.is_typedef = False

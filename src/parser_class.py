@@ -436,12 +436,15 @@ class _BaseDecl(_BASENODE):
     
 
 class InitDeclarator(_BaseDecl):
-    def __init__(self, declarator, initializer=None, parser_type=None):
+    def __init__(self, declarator, initializer=None, parser_type=None, is_typedef=False):
         super().__init__('TODO')
 
         self.declarator = declarator
         self.initializer = initializer
         self.expr_type = VarType(self.declarator.ref_count, parser_type, self.declarator.arr_offset)
+
+        if self.initializer is not None and is_typedef:
+            compilation_err.append('can not initialize typedef {}', self.declarator.name)
 
         if self.initializer is not None:
             
@@ -628,8 +631,31 @@ class Declaration(_BaseDecl):
         self.is_struct = _type is StructType
 
         if self.is_typedef:
-            # TODO: store symbols as aliases of _type
-            raise Exception('not supported')
+            for init_decl in self.init_list:
+                decl = init_decl.declarator
+
+                # Function declaration !
+                if isinstance(decl, FuncDirectDecl):    
+                    vartype = VarType(decl.ref_count, _type)
+                    # add alias as a function type
+                    symtable.add_typedef(decl.name, Function(vartype, decl.name, decl.param_list))
+                    continue
+
+                vartype = VarType(decl.ref_count, _type, decl.arr_offset)
+
+                # Sanity checking of arr offset
+                if not all(map(lambda x: isinstance(x, Const) and x.dvalue=='int', decl.arr_offset)):
+                    compilation_err.append('Only Int constant in array declaration')
+
+                if self.is_void and vartype.ref_count==0:
+                    compilation_err.append('cannot assign variable of type void')
+                
+                # struct declaration checking
+                if self.is_struct and _type.is_defined() and vartype.ref_count==0:
+                    compilation_err.append('storage of struct named {} not avaiable'.format(_type.name))
+
+                # Add declaration in symtab
+                symtable.add_typedef(decl.name, vartype)
 
         for init_decl in self.init_list:
 
