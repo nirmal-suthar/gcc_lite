@@ -46,8 +46,8 @@ def p_empty(p):
 def p_push_scope(p):
     ''' push_scope : empty
     '''
-    if isinstance(p[-1], ScopeName):
-        symtable.push_scope(p[-1].name)
+    if isinstance(p[-2], ScopeName):
+        symtable.push_scope(p[-2].name)
     else:
         symtable.push_scope()
 
@@ -369,8 +369,10 @@ def p_declaration_specifiers(p):
     '''
     if len(p) == 2:
         p[0] = DeclarationSpecifier(None, p[1])
+        p.type = p[1]
     else:
         p[0] = DeclarationSpecifier(p[1], p[2])
+        p.type = p[2]
 
 def p_init_declarator_list(p):
     ''' init_declarator_list : init_declarator
@@ -749,3 +751,4 @@ def p_function_definition(p):
 # if __name__ == '__main__':
 
 parser = yacc.yacc()
+parser.type = None

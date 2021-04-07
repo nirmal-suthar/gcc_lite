@@ -188,7 +188,7 @@ class Const(BaseExpr):
         super().__init__("Constant")
         self.const = const
         self.dvalue = dvalue
-        # self.get_type()
+        self.get_type()
 
     def get_type(self):
         if self.dvalue == 'int':
@@ -206,7 +206,7 @@ class Identifier(BaseExpr):
     def __init__(self, name: str):
         super().__init__("Identifier")
         self.name = name
-        # self.get_type()
+        self.get_type()
 
     def get_type(self):
         _var = symtable.lookup_var(self.name)
@@ -226,43 +226,44 @@ class OpExpr(BaseExpr):
         self.lhs = lhs
         self.ops = ops
         self.rhs = rhs
-        # self.get_type()
+        self.get_type()
 
     def get_type(self):
         
         if (
-            self.lhs.expr_type._type is not self.ops_type[self.ops] and
-            self.rhs.expr_type._type is not self.ops_type[self.ops]
+            self.lhs.expr_type._type not in self.ops_type[self.ops] and
+            self.rhs.expr_type._type not in self.ops_type[self.ops]
         ):
-            compilation_err.append('Type not compatible with ops {}'.format(self.ops)) 
+            compilation_err.append('Type not compatible with ops {}'.format(self.ops))
+            print("Here?")
 
-        if self.lhs._type.ref_count > 0:
-            if self.rhs._type.ref_count > 0:
-                if self.ops in ['-'] and self.rhs._type.ref_count == self.lhs._type.ref_count:
+        if self.lhs.expr_type.ref_count > 0:
+            if self.rhs.expr_type.ref_count > 0:
+                if self.ops in ['-'] and self.rhs.expr_type.ref_count == self.lhs.expr_type.ref_count:
                     inferred_type = 'int'
                     ref_count = 0
                 else:
                     compilation_err.append('Type not compatible with ops {}'.format(self.ops))
             else:
-                if self.rhs._type._type == 'int':
-                    inferred_type = self.lhs._type._type
-                    ref_count = self.lhs._type.ref_count
+                if self.rhs.expr_type._type == 'int':
+                    inferred_type = self.lhs.expr_type._type
+                    ref_count = self.lhs.expr_type.ref_count
                 else:
                     compilation_err.append('Type not compatible with ops {}'.format(self.ops))
         else:
-            if self.rhs._type.ref_count > 0:
+            if self.rhs.expr_type.ref_count > 0:
                 compilation_err.append('Type not compatible with ops {}'.format(self.ops))
             else:
-                if self.rhs._type._type == self.lhs._type._type:
-                    if self.rhs._type._type in self.ops_type[self.ops]:
-                        inferred_type = self.lhs._type._type
-                        ref_count = self.lhs._type.ref_count
+                if self.rhs.expr_type._type == self.lhs.expr_type._type:
+                    if self.rhs.expr_type._type in self.ops_type[self.ops]:
+                        inferred_type = self.lhs.expr_type._type
+                        ref_count = self.lhs.expr_type.ref_count
                     else:
                         compilation_err.append('Type not compatible with ops {}'.format(self.ops))
                 else:
-                    if self.rhs._type._type in self.ops_type[self.ops]:
-                        if self.lhs._type._type in self.ops_type[self.ops]:
-                            if self.rhs._type._type == 'float' or self.lhs._type._type == 'float':
+                    if self.rhs.expr_type._type in self.ops_type[self.ops]:
+                        if self.lhs.expr_type._type in self.ops_type[self.ops]:
+                            if self.rhs.expr_type._type == 'float' or self.lhs.expr_type._type == 'float':
                                 inferred_type = 'float'
                                 ref_count = 0
                             else:
@@ -275,21 +276,21 @@ class OpExpr(BaseExpr):
                     else:
                         compilation_err.append('Type not compatible with ops {}'.format(self.ops))
 
-        self._type(ref_count, inferred_type)
+        self.expr_type = VarType(ref_count, inferred_type)
 
 class UnaryExpr(OpExpr):
     def __init__(self, ops, rhs):
         super().__init__(None, ops, rhs)
-        # self.get_type()
+        self.get_type()
 
-def get_type(self):
+    def get_type(self):
 
         if self.ops == 'sizeof':
             inferred_type = 'int'
             ref_count = 0
         elif self.ops in ['--', '++', '+', '-']:
-            if self.rhs._type.ref_count == 0:
-                if self.rhs._type._type not in _BASENODE.ops_type[self.ops]:
+            if self.rhs.expr_type.ref_count == 0:
+                if self.rhs.expr_type._type not in self.ops_type[self.ops]:
                     compilation_err.append('Type not compatible with ops {}'.format(self.ops)) 
                 
                 inferred_type = 'int'
@@ -298,11 +299,11 @@ def get_type(self):
             else:
                 if self.ops in ['-', '+']:
                     compilation_err.append('wrong type argument to unary minus')
-                inferred_type = self.rhs._type._type
-                ref_count = self.rhs._type.ref_count
+                inferred_type = self.rhs.expr_type._type
+                ref_count = self.rhs.expr_type.ref_count
 
         elif self.ops in ['!', '~']:
-            if self.rhs._type._type not in _BASENODE.ops_type[self.ops]:
+            if self.rhs.expr_type._type not in self.ops_type[self.ops]:
                 compilation_err.append('Type not compatible with ops {}'.format(self.ops)) 
             
             inferred_type = 'int'
@@ -311,12 +312,12 @@ def get_type(self):
             if not isinstance(self.rhs, Identifier):
                 compilation_err('RHS should be an indentifier')
 
-            ref_count = self.rhs._type.ref_count \
+            ref_count = self.rhs.expr_type.ref_count \
                 + (1 if self.ops == '&' else -1)    
             
-            inferred_type = self.rhs._type._type
+            inferred_type = self.rhs.expr_type._type
         
-        self._type = VarType(ref_count, inferred_type)
+        self.expr_type = VarType(ref_count, inferred_type)
 
 class PostfixExpr(OpExpr):
     def __init__(self, lhs, ops, rhs=None):
@@ -326,8 +327,8 @@ class PostfixExpr(OpExpr):
         
         # simple operation
         if self.ops in ['--', '++']:
-            if self.lhs._type.ref_count == 0:
-                if self.lhs._type._type not in _BASENODE.ops_type[self.ops]:
+            if self.lhs.expr_type.ref_count == 0:
+                if self.lhs.expr_type._type not in self.ops_type[self.ops]:
                     compilation_err.append('Type not compatible with ops {}'.format(self.ops)) 
                 
                 inferred_type = 'int'
@@ -335,17 +336,20 @@ class PostfixExpr(OpExpr):
 
             else:
                 # pointer increment operation which returns the same type
-                inferred_type = self.lhs._type._type
-                ref_count = self.lhs._type.ref_count
+                inferred_type = self.lhs.expr_type._type
+                ref_count = self.lhs.expr_type.ref_count
 
         # struct deference child 
         elif self.ops == '.':
-            if isinstance(self.lhs._type._type, StructType):
-                struct_var = self.lhs._type._type.variables[self.rhs]
-                if struct_var is None:
-                    compilation_err.append('{} has no member named {}'.format(self.lhs._type._type.name, self.rhs))
-                inferred_type = struct_var._type
-                ref_count = struct_var.ref_count
+            if isinstance(self.lhs.expr_type._type, StructType):
+                if self.lhs.expr_type._type.is_defined():
+                    struct_var = self.lhs.expr_type._type.variables.get(self.rhs, None)
+                    if struct_var is None:
+                        compilation_err.append('{} has no member named {}'.format(self.lhs.expr_type._type.name, self.rhs))
+                    inferred_type = struct_var._type
+                    ref_count = struct_var.ref_count
+                else:
+                    compilation_err.append('Incomplete struct {}'.format(self.lhs.expr_type._type.name))
             else:
                 compilation_err.append('Dereferencing invalid struct type')
         # function calling
@@ -364,14 +368,13 @@ class PostfixExpr(OpExpr):
                     compilation_err.append('too few/many arguments to function {}'.format(func.name))
             else:
                 compilation_err.append('called object is not a function or function pointer')
-            # set return type as type of function
-            raise Exception('TODO')
+            
         # array reference
         elif self.ops == '[':
-            if self.rhs._type == VarType(0, 'int'):
-                if self.lhs._type.ref_count > 0:
-                    inferred_type = self.lhs._type._type
-                    ref_count = self.lhs._type.ref_count - 1
+            if self.rhs.expr_type == VarType(0, 'int'):
+                if self.lhs.expr_type.ref_count > 0:
+                    inferred_type = self.lhs.expr_type._type
+                    ref_count = self.lhs.expr_type.ref_count - 1
                 else:
                     compilation_err.append('Subscripted value is neither array nor pointer')
             else:
@@ -382,12 +385,25 @@ class CastExpr(BaseExpr):
         super().__init__("Cast Expression")
         self.type = _type
         self.expr = Expr
+        self.get_type()
 
     def get_type(self):
-        raise Exception('TODO')
-        # curr_type = get_expr_type(self.expr)
-        # if not allowed_typecast(curr_type,type)
-        #     print_compilation_error("Type conversion error",expr.lineno(0))
+        if self.expr.expr_type.ref_count > 0:
+            if self.type.ref_count > 0:
+                self.expr_type = self.type
+            else:
+                if self.expr.expr_type._type in ['int', 'char']:
+                    self.expr_type = self.type
+                else:
+                    compilation_err.append('Cannot convert pointer to float')
+        else:
+            if self.type.ref_count > 0:
+                if self.expr.expr_type._type in ['int', 'char']:
+                    self.expr_type = self.type
+                else:
+                    compilation_err.append('Cannot convert float to pointer')
+            else:
+                self.expr_type = self.type
 
 class AssignExpr(OpExpr):
     def __init__(self, lhs, ops, rhs):
@@ -420,17 +436,40 @@ class _BaseDecl(_BASENODE):
     
 
 class InitDeclarator(_BaseDecl):
-    def __init__(self, declarator, initializer=None):
+    def __init__(self, declarator, initializer=None, parser_type=None):
         super().__init__('TODO')
+
         self.declarator = declarator
         self.initializer = initializer
+        self.expr_type = VarType(self.declarator.ref_count, parser_type, self.declarator.arr_offset)
 
         if self.initializer is not None:
             
-            # check type leftside and if
-            # compatible then init it.
-            raise Exception('Not supported')
+            if isinstance(self.initializer, Initializers):
+                raise Exception('Array initializer not handled')
             
+            if self.initializer.expr_type.ref_count == 0:
+                if self.expr_type.ref_count + len(self.expr_type.arr_offset) == 0:
+                    if self.initializer.expr_type._type == parser_type:
+                        pass
+                    else:
+                        self.initializer = CastExpr(self.expr_type, self.initializer)
+                else:
+                    if self.initializer.expr_type._type == 'float':
+                        compilation_err.append('Can not assign float to pointer')
+                    else:
+                        self.initializer = CastExpr(self.expr_type, self.initializer)
+            else:
+                if self.expr_type.ref_count + len(self.expr_type.arr_offset) == 0:
+                    if self.expr_type._type == 'float':
+                        compilation_err.append('Can not typecast pointer to float')
+                    else:
+                        self.initializer = CastExpr(self.expr_type, self.initializer)
+                else:
+                    if self.initializer.expr_type.ref_count == self.expr_type.ref_count + len(self.expr_type.arr_offset):
+                        pass
+                    else:
+                        self.initializer = CastExpr(self.expr_type, self.initializer)
         # dot: print only if initiaizer is not empty
 
 class Specifier(_BaseDecl):
