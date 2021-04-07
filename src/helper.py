@@ -1,11 +1,15 @@
+import csv
+
 class ScopeTable:
-    def __init__(self, scope_depth=0, parent=None):
+    def __init__(self, scope_depth=0, parent=None, scope_id=0, scope_type='Other'):
+        self.scope_id = scope_id        # scope id
         self.scope_depth = scope_depth  # scope depth
         self.parent = parent            # parent scopeTable
         self.variables = {}             # for identifiers
         self.aliases = {}               # for typedefs
         self.structs = {}               # for structs and union
-        self.metadata = 'TODO'          # will include function, loop or ifelse
+        self.metadata = scope_type      # will include function, loop or ifelse
+
 
     def lookup_var(self, name):
         if name in self.variables:
@@ -41,7 +45,7 @@ class SymbolTable():
         return self.scope_stack[-1]
 
     def push_scope(self, scope_type='TODO') -> None:
-        new_scope = ScopeTable(self.cur_depth(), self.scope_stack[-1])
+        new_scope = ScopeTable(self.cur_depth(), self.scope_stack[-1], len(self.all_scope), scope_type)
         self.all_scope.append(new_scope)
         self.scope_stack.append(new_scope)
 
@@ -106,6 +110,41 @@ class SymbolTable():
             return
                 
         self.function[func.name] = func
+
+    def dump_csv(self, filename):
+        with open(filename, 'w', newline='') as csv_file:
+            writer = csv.writer(csv_file)
+            writer.writerow(['Table Id', 'Parent Id', 'Table Type', 'Symbol Id', 'Symbol Name', 'Symbol Type', 'Symbol Other Information'])
+            scope_id = 0
+            parent_id = 'null'
+            idx = 0
+            for key in self.function:
+                row = [scope_id, parent_id, self.all_scope[scope_id].metadata, idx, key, 'function', str(self.function[key])]
+                writer.writerow(row)
+                idx += 1
+            
+            print(len(self.all_scope))
+            for _ in range(len(self.all_scope)):
+                cur_scope = self.all_scope[scope_id]
+                for key in cur_scope.structs:
+                    row = [scope_id, parent_id, cur_scope.metadata, idx, key, 'struct', str(cur_scope.structs[key])]
+                    writer.writerow(row)
+                    idx += 1
+                
+                for key in cur_scope.variables:
+                    row = [scope_id, parent_id, cur_scope.metadata, idx, key, 'variable', str(cur_scope.variables[key])]
+                    writer.writerow(row)
+                    idx += 1
+                
+                for key in cur_scope.aliases:
+                    row = [scope_id, parent_id, cur_scope.metadata, idx, key, 'type alias', str(cur_scope.aliases[key])]
+                    writer.writerow(row)
+                    idx += 1
+                
+                scope_id += 1
+                if scope_id != len(self.all_scope):
+                    parent_id = self.all_scope[scope_id].parent.scope_id
+                idx = 0
 
 symtable = SymbolTable()
 compilation_err = []

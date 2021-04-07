@@ -79,6 +79,9 @@ class StructType(_BASENODE):
         # For use in lambda struct and defined struct
         self.variables = variables
 
+    def __str__(self):
+        return 'struct {} {{ {} }}'.format(self.name, self.variables)
+
     def is_defined(self):
         if self.variables is not None:
             return True
@@ -95,6 +98,12 @@ class Function(_BASENODE):
         self.ret_type = ret_type    # should be VarType
         self.name = name            # str
         self.args = args            # list
+    
+    def __str__(self):
+        return 'Function(ret_type={}, name={}, args={})'.format(str(self.ret_type), self.name, self.args)
+    
+    # def is_defined(self):
+
 
 class VarType(_BASENODE):
     def __init__(self, ref_count, _type, arr_offset=None):
@@ -103,6 +112,20 @@ class VarType(_BASENODE):
         self._type = _type
         self.arr_offset = arr_offset
 
+    def __str__(self):
+        if isinstance(self._type, str):
+            type_string = self._type
+        else:
+            type_string = str(self._type)
+        return type_string + " " + "*" * self.ref_count
+    
+    def __repr__(self):
+        return str(self)
+
+    def __eq__(self, other):
+        if not isinstance(other, VarType):
+            return False
+        return self.ref_count == other.ref_count and self._type == other._type
     @staticmethod
     def _gen_dot(obj):
         """Get a list of node and edge declarations."""
@@ -228,7 +251,15 @@ class Identifier(BaseExpr):
     def get_type(self):
         _var = symtable.lookup_var(self.name)
         if _var is None:
-            compilation_err.append('Undeclared Variable')
+            _var = symtable.lookup_func(self.name)
+            if _var is None:
+                _var = symtable.lookup_struct(self.name)
+                if _var is None:
+                    compilation_err.append('Undeclared Variable {}'.format(self.name))
+                else:
+                    self.expr_type = _var
+            else:
+                self.expr_type = _var
         else:
             self.expr_type = _var
 
@@ -247,12 +278,15 @@ class OpExpr(BaseExpr):
 
     def get_type(self):
         
+        ref_count = 0
+        inferred_type = 'int'
+
         if (
             self.lhs.expr_type._type not in self.ops_type[self.ops] and
             self.rhs.expr_type._type not in self.ops_type[self.ops]
         ):
             compilation_err.append('Type not compatible with ops {}'.format(self.ops))
-            print("Here?")
+            # print("Here?")
 
         if self.lhs.expr_type.ref_count > 0:
             if self.rhs.expr_type.ref_count > 0:
@@ -302,6 +336,9 @@ class UnaryExpr(OpExpr):
 
     def get_type(self):
 
+        ref_count = 0
+        inferred_type = 'int'
+
         if self.ops == 'sizeof':
             inferred_type = 'int'
             ref_count = 0
@@ -338,11 +375,16 @@ class UnaryExpr(OpExpr):
 
 class PostfixExpr(OpExpr):
     def __init__(self, lhs, ops, rhs=None):
+        self.ops_type['++'] = ['int', 'char', 'float']
+        self.ops_type['--'] = ['int', 'char', 'float']
         super().__init__(lhs, ops, rhs)
-
+ 
     def get_type(self):
         
-        # simple operation
+        ref_count = 0
+        inferred_type = 'int'
+        arr_offset = []
+
         if self.ops in ['--', '++']:
             if self.lhs.expr_type.ref_count == 0:
                 if self.lhs.expr_type._type not in self.ops_type[self.ops]:
@@ -358,7 +400,7 @@ class PostfixExpr(OpExpr):
 
         # struct deference child 
         elif self.ops == '.':
-            if isinstance(self.lhs.expr_type._type, StructType):
+            if isinstance(self.lhs.expr_type, StructType):
                 if self.lhs.expr_type._type.is_defined():
                     struct_var = self.lhs.expr_type._type.variables.get(self.rhs, None)
                     if struct_var is None:
@@ -373,8 +415,8 @@ class PostfixExpr(OpExpr):
         elif self.ops == '(':
             arg_list = [] if self.rhs is None else self.rhs
             # sanity checking of function args and 
-            if isinstance(self.lhs, str):
-                func = symtable.lookup_func(self.lhs)
+            if isinstance(self.lhs.expr_type, Function):
+                func = self.lhs.expr_type
                 if func is None:
                     compilation_err.append('{} is not callable'.format(self.lhs))
 
@@ -389,13 +431,23 @@ class PostfixExpr(OpExpr):
         # array reference
         elif self.ops == '[':
             if self.rhs.expr_type == VarType(0, 'int'):
+                # print(self.lhs.expr_type, self.rhs.expr_type)
                 if self.lhs.expr_type.ref_count > 0:
                     inferred_type = self.lhs.expr_type._type
-                    ref_count = self.lhs.expr_type.ref_count - 1
+                    if len(self.lhs.expr_type.arr_offset) > 1:
+                        ref_count = self.lhs.expr_type.ref_count
+                        arr_offset = self.lhs.expr_type.arr_offset[1:]
+                    elif len(self.lhs.expr_type.arr_offset) == 1:
+                        ref_count = self.lhs.expr_type.ref_count - 1
+                        arr_offset = self.lhs.expr_type.arr_offset[1:]
+                    else:
+                        ref_count = self.lhs.expr_type.ref_count - 1
                 else:
                     compilation_err.append('Subscripted value is neither array nor pointer')
             else:
                 compilation_err.append('Array subscript is not an integer')
+        
+        self.expr_type = VarType(ref_count, inferred_type, arr_offset)
             
 class CastExpr(BaseExpr):
     def __init__(self, _type, Expr):
@@ -426,6 +478,12 @@ class AssignExpr(OpExpr):
     def __init__(self, lhs, ops, rhs):
         super().__init__(lhs, ops, rhs)
 
+    def get_type(self):
+        
+        # compatability is checked in CastExpr
+        self.rhs = CastExpr(self.lhs.expr_type, self.lhs)
+        self.expr_type = self.lhs.expr_type
+
 class CondExpr(BaseExpr):
     def __init__(self, cond, if_expr, else_expr):
         super().__init__("Conditional Expr")
@@ -437,9 +495,13 @@ class CommaExpr(BaseExpr):
     def __init__(self, *expr):
         super().__init__("Comma Expression")
         self.expr_list = expr
-    
+        self.get_type()
+
     def add_expr(self, expr):
         self.expr_list.append(expr)
+    
+    def get_type(self):
+        self.expr_type = self.expr_list[-1].expr_type
 
 # #############################################################################
 # Declarators            
@@ -685,7 +747,7 @@ class Declaration(_BaseDecl):
                 continue
 
             vartype = VarType(decl.ref_count, _type, decl.arr_offset)
-
+            # print("declaring", decl.name, vartype)
             # Sanity checking of arr offset
             if not all(map(lambda x: isinstance(x, Const) and x.dvalue=='int', decl.arr_offset)):
                 compilation_err.append('Only Int constant in array declaration')

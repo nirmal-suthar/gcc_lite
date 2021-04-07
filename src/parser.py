@@ -48,6 +48,9 @@ def p_push_scope(p):
     '''
     if isinstance(p[-2], ScopeName):
         symtable.push_scope(p[-2].name)
+        if p[-2].name == 'Function':
+            for name, _type in p[-3]:
+                symtable.add_var(name, _type)
     else:
         symtable.push_scope()
 
@@ -501,7 +504,10 @@ def p_direct_declarator(p):
         p[0] = (p[2].ref_count, p[2].name, p[2].arr_offset)
     else:
         (rcount, ident, args) = p[1]
-        p[0] = (rcount, ident, args+[p[3]])
+        if args == []:
+            p[0] = (rcount+1, ident, [p[3]])
+        else:
+            p[0] = (rcount, ident, args + [p[3]])
 
 def p_param_list(p):
     ''' param_list : '(' parameter_type_list ')'
