@@ -270,6 +270,8 @@ class OpExpr(BaseExpr):
         ops: str, 
         rhs: BaseExpr
     ):
+        self.ops_type['=='] = ['int', 'char', 'float']
+        self.ops_type['!='] = ['int', 'char', 'float']
         super().__init__("Expression")
         self.lhs = lhs
         self.ops = ops
