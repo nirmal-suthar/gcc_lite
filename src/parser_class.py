@@ -37,7 +37,7 @@ class _BASENODE:
             FILTERED_LIST = [None, "", []]    
 
             for child in filter(lambda x: not x in FILTERED_LIST, obj):
-                _gen_dot_func = obj._gen_dot if isinstance(obj, _BASENODE) else _BASENODE._gen_dot
+                _gen_dot_func = child._gen_dot if isinstance(child, _BASENODE) else _BASENODE._gen_dot
                 dot_list.append(_gen_dot_func(child))                
 
         elif isinstance(obj, _BASENODE):
@@ -55,7 +55,7 @@ class _BASENODE:
                 if isinstance(child, list):
                     child_list.append(repr(attr))
 
-                _gen_dot_func = obj._gen_dot if isinstance(obj, _BASENODE) else _BASENODE._gen_dot
+                _gen_dot_func = child._gen_dot if isinstance(child, _BASENODE) else _BASENODE._gen_dot
                 child_list = child_list + _gen_dot_func(child)
 
                 if len(child_list) == 1:
@@ -102,6 +102,23 @@ class VarType(_BASENODE):
         self.ref_count = ref_count
         self._type = _type
         self.arr_offset = arr_offset
+
+    @staticmethod
+    def _gen_dot(obj):
+        """Get a list of node and edge declarations."""
+
+        dot_list = ['VarType', 'ref_count={}'.format(obj.ref_count)]
+        child_type = obj._type._gen_dot(obj._type) if isinstance(obj._type, _BASENODE) else obj._type
+        dot_list.append(child_type)
+
+        if obj.arr_offset is None or len(obj.arr_offset)==0:
+            return dot_list
+
+        dim_list = ['Array Dims']
+        for dim in obj.arr_offset:
+            dim_list.append(dim._gen_dot(dim))
+
+        return dot_list
 
 class ScopeName:
     def __init__(self, name):
@@ -682,6 +699,7 @@ class Declaration(_BaseDecl):
 
             # Add declaration in symtab
             symtable.add_var(decl.name, vartype, self.is_static)
+
     @staticmethod
     def _gen_dot(obj):
         """Get a list of node and edge declarations."""
@@ -714,10 +732,26 @@ class LabeledStmt(Statement):
         self.stmt = stmt
 
 class CompoundStmt(Statement):
-    def __init__(self, decls, stmts):
+    def __init__(
+        self, 
+        decls: List[Declaration], 
+        stmts: List[Statement]
+    ):
         super().__init__("Compound Statment")
         self.decl_list = decls
         self.stmt_list = stmts
+
+    @staticmethod
+    def _gen_dot(obj):
+        """Get a list of node and edge declarations."""
+        dot_list = ['CompoundStmt']
+        
+        for decl in obj.decl_list:
+            dot_list.append(decl._gen_dot(decl))
+        
+        for stmt in obj.stmt_list:
+            dot_list.append(stmt._gen_dot(stmt))
+        
 
 class ExprStmt(Statement):
     def __init__(self, expr):
@@ -820,7 +854,7 @@ class Start(Node):
         tree = self._gen_dot(self)
         AST = remove_redundancy(tree)
         generate_dot(graph, AST, node_idx)
-        return AST
+        return tree
 
 
 class FuncDef(Node):
@@ -846,7 +880,7 @@ class FuncDef(Node):
         """Get a list of node and edge declarations."""
 
         dot_list = ['FuncDef']
-
+        
         # ret_type
         dot_list.append(obj.vartype._gen_dot(obj.vartype))                
 
