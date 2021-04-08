@@ -11,7 +11,7 @@ int g(int b,int c){
 
 int main(){
   int a=10;
-  int b;
+  int b=4;
   b--;
   int k =(int) a;
 

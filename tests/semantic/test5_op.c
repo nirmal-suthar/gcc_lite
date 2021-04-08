@@ -14,8 +14,8 @@ int main()
     }
     // printf("%d",&d); scope error line
     a = ch + b;
-    a = a >> 2; //error line;
-    ch = ch | a;//error line;
-    a = a%2;//error line
+    // a = a >> 2; //error line;
+    // ch = ch | a;//error line;
+    // a = a%2;//error line
     return 0;
 }

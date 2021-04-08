@@ -6,11 +6,12 @@ void main(){
     int a = 3;
     int b = 2;
     int c = 99;
+
     switch(a) 
     {
         case 1:
             if(b == 0) 
-                printf("%d",c);
+                printf("%d",&c);
         case 2:
             if(b==1) a = 10;
         case 3:
@@ -19,10 +20,10 @@ void main(){
                 while(x>1)
                 {
                     x--;
-                    for(int a = 0; a < 5; a++){
+                    for( a = 0; a < 5; a++){
                         int l = sum(x,a);
                     }
-                    printf("%d",&l);//error line
+                    // printf("%d",&l);//error line
                 }
                 a = x*a;
             }
