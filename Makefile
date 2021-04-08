@@ -8,7 +8,7 @@ all:
 	$(PYTHON) -m py_compile $(SRC)/lexer.py $(SRC)/parser.py
 	$(PYTHON) $(SRC)/parser.py
 
-	ln -sf $(PWD)/$(SRC)/parser_dot.py $(BIN)/parser
+	ln -sf $(PWD)/$(SRC)/parse.py $(BIN)/parser
 	chmod u+x $(BIN)/parser
 	
 dep:

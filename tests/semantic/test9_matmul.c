@@ -22,7 +22,7 @@ for(i=0;i<3;i++){
             k++;
             }//end of k loop  
             }//end of j loop  
-        printf("\n");
+        // printf("\n");
         }
     return 0;	
 }

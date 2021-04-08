@@ -11,16 +11,18 @@ int main()
   // T = scanf();
   while (1) 
   {
-    T = T-1;
     int n; 
+    T = T-1;
     // n = scanf();
-    printf("odd: ");
-    printf(odd(n));
-    printf("even: ");
-    printf(even(n));
+    // printf("odd: ");
+    // printf(odd(n));
+    // printf("even: ");
+    // printf(even(n));
   }
   return 0;
 }
+
+int odd(int number);
 
 int even(int number) {    
   if (number == 0)

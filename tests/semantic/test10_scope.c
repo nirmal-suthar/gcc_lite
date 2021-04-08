@@ -11,7 +11,7 @@ void main(){
     {
         case 1:
             if(b == 0) 
-                printf("%d",&c);
+                // printf("%d",&c);
         case 2:
             if(b==1) a = 10;
         case 3:

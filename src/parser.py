@@ -428,6 +428,7 @@ def p_type_specifier_typedef(p):
     ''' type_specifier : TYPE_NAME
     '''
     p[0] = p[1]
+    # print(p[1], symtable.cur_scope().aliases)
     lookup_alias = symtable.lookup_alias(p[1])
     p.type = lookup_alias._type
     
@@ -708,6 +709,8 @@ def p_selection_statement(p):
     '''
     if len(p)==6:
         p[0] = SelectionStmt(p[1], p[3], p[5])
+    elif len(p) == 7:
+        p[0] = SelectionStmt(p[1], p[3], p[6])
     else:
         p[0] = SelectionStmt(p[1], p[3], p[5], p[7])
 
@@ -879,7 +882,7 @@ class StructType(_BASENODE):
         raise Exception('TODO')
 
 class Function(_BASENODE):
-    def __init__(self, ret_type, name, args, is_ellipsis=False, is_defined=False):
+    def __init__(self, ret_type, name, args, is_ellipsis=False, is_declared=False):
         super().__init__()
         self.ret_type = ret_type        # should be VarType
         self.name = name                # str
@@ -1145,6 +1148,8 @@ class OpExpr(BaseExpr):
 
 class UnaryExpr(OpExpr):
     def __init__(self, ops, rhs):
+        self.ops_type['++'] = ['int', 'char', 'float']
+        self.ops_type['--'] = ['int', 'char', 'float']
         super().__init__(None, ops, rhs)
         self.get_type()
 
@@ -1586,6 +1591,7 @@ class FuncDirectDecl(_BaseDecl):
         self.name = name
         self.param_list = param_list
         self.is_ellipsis = is_ellipsis
+        self.arr_offset = None
 
 class Declaration(_BaseDecl):
     def __init__(
@@ -1995,8 +2001,14 @@ class SymbolTable():
             scope = scope.parent
         return None
 
-    def lookup_alias(self, id):
-        return self.cur_scope().lookup_alias(id)
+    def lookup_alias(self, name):
+        scope = self.cur_scope()
+        while scope:
+            if scope.lookup_alias(name):
+                return scope.aliases[name]
+            scope = scope.parent
+        return None
+        # return self.cur_scope().lookup_alias(id)
 
     def lookup_func(self, name):
         if name in self.function:
@@ -2010,7 +2022,7 @@ class SymbolTable():
         scope = self.global_scope if is_static else self.cur_scope()
         if scope.lookup_var(name):
             compilation_err.append('Redeclaration of variable named {}'.format(name))
-            # parser.error = compilation_err[-1]
+            parser.error = compilation_err[-1]
             parser_error()
             return
 
@@ -2019,7 +2031,7 @@ class SymbolTable():
     def add_struct(self, name, struct_type):
         if self.cur_scope().lookup_struct(name):
             compilation_err.append('Redeclaration of struct named {}'.format(name))
-            # parser.error = compilation_err[-1]
+            parser.error = compilation_err[-1]
             parser_error()
             return
 
@@ -2034,13 +2046,16 @@ class SymbolTable():
             pass
         else:
             compilation_err.append('Redeclaration of type/alias named {}'.format(alias))
-            # parser.error = compilation_err[-1]
+            parser.error = compilation_err[-1]
             parser_error()
         
     def add_func(self, func) -> None:
         if func.name in self.function:
+            func_ = self.function[func.name]
+            if func_.ret_type == func.ret_type and func_.args == func.args and func_.is_ellipsis == func.is_ellipsis:
+                return
             compilation_err.append('Redeclaration of function named {}'.format(func.name))
-            # parser.error = compilation_err[-1]
+            parser.error = compilation_err[-1]
             parser_error()
             return
                 
@@ -2050,6 +2065,8 @@ class SymbolTable():
         with open(filename, 'w', newline='') as csv_file:
             writer = csv.writer(csv_file)
             writer.writerow(['Table Id', 'Parent Id', 'Table Type', 'Symbol Id', 'Symbol Name', 'Symbol Type', 'Symbol Other Information'])
+            writer.writerow(['======','======','======','======','======','======','======'])
+            
             scope_id = 0
             parent_id = 'null'
             idx = 0
@@ -2079,6 +2096,10 @@ class SymbolTable():
                 if scope_id != len(self.all_scope):
                     parent_id = self.all_scope[scope_id].parent.scope_id
                 idx = 0
+                if scope_id != len(self.all_scope):
+                    # writer.writerow(['','','','','','',''])
+                    writer.writerow(['======','======','======','======','======','======','======'])
+                    # writer.writerow(['','','','','','',''])
 
 symtable = SymbolTable()
 compilation_err = []

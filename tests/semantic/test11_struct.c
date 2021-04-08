@@ -13,8 +13,8 @@ int main()
   // strcpy(record.name, "Raju");
   record.percentage = 86.5;
 
-  printf(" Id is: %d \n", (record.id));
+  // printf(" Id is: %d \n", (record.id));
   // printf(" Name is: %s \n", &record.name);
-  printf(" Percentage is: %f \n", (record.percentage));
+  // printf(" Percentage is: %f \n", (record.percentage));
   return 0;
 }

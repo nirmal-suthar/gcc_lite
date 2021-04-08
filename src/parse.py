@@ -2,12 +2,13 @@
 
 import sys, argparse, pydot
 from argparse import ArgumentParser
+from parser import parser, lexer, symtable
 
 
 def arg_parser():
 
     argparser = ArgumentParser(prog='gcc_lite', 
-        description='Parser for C programs')
+        description='Parser and Semantic checker for C programs')
 
     argparser.add_argument('input', type=str, 
         help='C program file to parse')
@@ -15,8 +16,8 @@ def arg_parser():
     argparser.add_argument('-v', '--verbose', action="store_true", 
         help='Force output on stdout')
 
-    argparser.add_argument('-d', '--debug', action="store_true", 
-        help='Generate complete syntax tree for debugging purpose')
+    # argparser.add_argument('-d', '--debug', action="store_true", 
+    #     help='Generate complete syntax tree for debugging purpose')
     
     argparser.add_argument('-o', '--out', type=str, 
         help='File to store generated DOT file')
@@ -42,17 +43,13 @@ if __name__ == "__main__":
     with open(args.input, 'r') as f:
         ifile = f.read()
     
-    if args.debug:
-        from parser_debug import parser, lexer
-    else:
-        from parser import parser, lexer, symtable, compilation_err
 
     lexer.filename = args.input 
     lexer.lines = ifile.split("\n")
 
     syntax_tree = parser.parse(ifile)
 
-    if syntax_tree is None:
+    if syntax_tree is None or parser.compilation_err:
         exit(1)
         
     graph = pydot.Dot('gcc_lite: Abstract Syntax Tree', graph_type='digraph')

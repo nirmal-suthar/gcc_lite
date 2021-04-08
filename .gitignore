@@ -7,3 +7,4 @@ src/parser.out
 *.dot
 *.ps
 *.out
+*.csv

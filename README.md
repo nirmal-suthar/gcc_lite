@@ -22,14 +22,14 @@ $ make
 $ make clean # For removing the build
 ```
 
-### For generating dot file (parser)
+### For generating dot file (parser) and dump of symbol table in `csv` format
 ```bash
 $ ./bin/parser -o myAST.dot /tests/helloworld.c 
 
 # For generates a postscript program containing the drawing of the tree 
 $ dot -Tps myAST.dot -o myAST.ps 
 # Alternatively, for generating .png file
-$ ./bin/parser -o myAST.dot -png /tests/helloworld.c
+$ ./bin/parser -o myAST.dot --png /tests/helloworld.c
 ```
 
 
