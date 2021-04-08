@@ -7,13 +7,7 @@ from os import removedirs
 from typing import Union, List
 import pydot
 from helper import *
-from parser import parser, lexer, bcolors
 
-def parser_error(err_string='default'):
-    parser.compilation_err = True
-    print(bcolors.BOLD+'{}:{}:'.format(lexer.filename,lexer.lineno)+bcolors.ENDC,end='')
-    print(bcolors.FAIL+' SyntaxError: '+bcolors.ENDC,err_string)
-    print('     {} |{}'.format(lexer.lineno,lexer.lines[lexer.lineno - 1]))
 
 
 # #############################################################################
@@ -979,10 +973,12 @@ class JumpStmt(Statement):
         self.expr = expr
         if self.jump_type == 'break':
             if not symtable.check_break_scope():
-                parser_error('break not allowed without loop or switch')
+                parser.error = 'break not allowed without loop or switch'
+                parser_error()
         elif self.jump_type == 'continue':
             if not symtable.check_continue_scope():
-                parser_error('continue not allowed without loop')
+                parser.error = 'continue not allowed without loop'
+                parser_error()
 
 
 # #############################################################################
@@ -1040,6 +1036,8 @@ class Start(Node):
                 elif type(child) is str:
                     newList.append(child)
                 else:
+                    print(child)
+                    print(newList)
                     raise Exception('remove: Invalid type {}'.format(type(child)))
                 
             if len(newList) == 1:
@@ -1120,3 +1118,4 @@ class FuncDef(Node):
         dot_list.append(obj.stmt._gen_dot(obj.stmt))                
     
         return dot_list
+

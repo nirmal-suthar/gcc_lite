@@ -1,4 +1,11 @@
 import csv
+from parser import parser, lexer, bcolors
+
+def parser_error(error_str=None):
+    parser.compilation_err = True
+    print(bcolors.BOLD+'{}:{}:'.format(lexer.filename,lexer.lineno)+bcolors.ENDC,end='')
+    print(bcolors.FAIL+' SyntaxError: '+bcolors.ENDC,parser.error)
+    print('     {} |{}'.format(lexer.lineno,lexer.lines[lexer.lineno - 1]))
 
 class ScopeTable:
     def __init__(self, scope_depth=0, parent=None, scope_id=0, scope_type='Other'):
@@ -99,6 +106,8 @@ class SymbolTable():
         scope = self.global_scope if is_static else self.cur_scope()
         if scope.lookup_var(name):
             compilation_err.append('Redeclaration of variable named {}'.format(name))
+            # parser.error = compilation_err[-1]
+            parser_error()
             return
 
         scope.variables[name] = vtype
@@ -106,6 +115,8 @@ class SymbolTable():
     def add_struct(self, name, struct_type):
         if self.cur_scope().lookup_struct(name):
             compilation_err.append('Redeclaration of struct named {}'.format(name))
+            # parser.error = compilation_err[-1]
+            parser_error()
             return
 
         self.cur_scope().structs[name] = struct_type
@@ -119,10 +130,14 @@ class SymbolTable():
             pass
         else:
             compilation_err.append('Redeclaration of type/alias named {}'.format(alias))
+            # parser.error = compilation_err[-1]
+            parser_error()
         
     def add_func(self, func) -> None:
         if func.name in self.function:
             compilation_err.append('Redeclaration of function named {}'.format(func.name))
+            # parser.error = compilation_err[-1]
+            parser_error()
             return
                 
         self.function[func.name] = func
@@ -163,3 +178,4 @@ class SymbolTable():
 
 symtable = SymbolTable()
 compilation_err = []
+

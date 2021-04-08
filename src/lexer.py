@@ -5,7 +5,7 @@ from ply.lex import TOKEN
 from tabulate import tabulate
 import re
 import sys
-from helper import *
+
 
 keywords = {
     # 'asm':'ASM',
@@ -259,3 +259,5 @@ if __name__ == "__main__":
             break
     
     print(tabulate(tokenList, headers=["Token", "Lexeme", "Line#", "Column#"]))
+
+from parser import symtable
