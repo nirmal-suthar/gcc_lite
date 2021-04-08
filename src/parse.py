@@ -54,9 +54,10 @@ if __name__ == "__main__":
 
     if syntax_tree is None:
         exit(1)
-
+        
+    graph = pydot.Dot('gcc_lite: Abstract Syntax Tree', graph_type='digraph')
     symtable.dump_csv(args.out.split('.')[-2] + '.csv')
-    graph = syntax_tree.gen_dot()
+    AST = syntax_tree.gen_dot(graph)
 
     graph.write_raw(args.out)
     print('DOT file "{}" generated.'.format(args.out))

@@ -679,7 +679,7 @@ def p_statement_list(p):
     if len(p) == 2:
         p[0] = [p[1]]
     else:
-        p[0] = p[1] + [[p[2]]]
+        p[0] = p[1] + [p[2]]
 
 def p_expression_statement(p):
     ''' expression_statement : ';'

@@ -610,10 +610,7 @@ def p_external_declaration(p):
     pass
 
 def p_function_definition(p):
-    ''' function_definition : declaration_specifiers declarator declaration_list compound_statement
-            | declaration_specifiers declarator compound_statement
-            | declarator declaration_list compound_statement
-            | declarator compound_statement
+    ''' function_definition : declaration_specifiers declarator compound_statement
     '''
     p[0] = ['function_definition'] + p[1:]
     pass

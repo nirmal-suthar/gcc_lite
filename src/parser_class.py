@@ -58,10 +58,11 @@ class _BASENODE:
                 _gen_dot_func = child._gen_dot if isinstance(child, _BASENODE) else _BASENODE._gen_dot
                 child_list = child_list + _gen_dot_func(child)
 
-                if len(child_list) == 1:
-                    dot_list.append(child_list[0])
-                else:
-                    dot_list.append(child_list)
+                dot_list.append(child_list)
+                # if len(child_list) == 1:
+                #     dot_list.append(child_list[0])
+                # else:
+                #     dot_list.append(child_list)
                 
         return dot_list
 
@@ -126,22 +127,11 @@ class VarType(_BASENODE):
         if not isinstance(other, VarType):
             return False
         return self.ref_count == other.ref_count and self._type == other._type
+    
     @staticmethod
     def _gen_dot(obj):
         """Get a list of node and edge declarations."""
-
-        dot_list = ['VarType', 'ref_count={}'.format(obj.ref_count)]
-        child_type = obj._type._gen_dot(obj._type) if isinstance(obj._type, _BASENODE) else obj._type
-        dot_list.append(child_type)
-
-        if obj.arr_offset is None or len(obj.arr_offset)==0:
-            return dot_list
-
-        dim_list = ['Array Dims']
-        for dim in obj.arr_offset:
-            dim_list.append(dim._gen_dot(dim))
-
-        return dot_list
+        return ['type = ' + repr(obj)]
 
 class ScopeName:
     def __init__(self, name):
@@ -242,6 +232,11 @@ class Const(BaseExpr):
         else:
             compilation_err.append('Unknown Constant type')
 
+    @staticmethod
+    def _gen_dot(obj):
+        dot_list = ['Const', obj.expr_type._gen_dot(obj.expr_type), obj.const]
+        return dot_list
+
 class Identifier(BaseExpr):
     def __init__(self, name: str):
         super().__init__("Identifier")
@@ -288,24 +283,29 @@ class OpExpr(BaseExpr):
             self.rhs.expr_type._type not in self.ops_type[self.ops]
         ):
             compilation_err.append('Type not compatible with ops {}'.format(self.ops))
-            # print("Here?")
 
+        # if lhs is pointer
         if self.lhs.expr_type.ref_count > 0:
+            # if rhs is pointer -> only '-' works
             if self.rhs.expr_type.ref_count > 0:
                 if self.ops in ['-'] and self.rhs.expr_type.ref_count == self.lhs.expr_type.ref_count:
                     inferred_type = 'int'
                     ref_count = 0
                 else:
                     compilation_err.append('Type not compatible with ops {}'.format(self.ops))
+            # lhs is pointer and rhs is int => pointer add and sub
             else:
                 if self.rhs.expr_type._type == 'int':
                     inferred_type = self.lhs.expr_type._type
                     ref_count = self.lhs.expr_type.ref_count
                 else:
                     compilation_err.append('Type not compatible with ops {}'.format(self.ops))
+        # if lhs is not pointer
         else:
+            # FIXME: 1 + (int*)a works but not handled
             if self.rhs.expr_type.ref_count > 0:
                 compilation_err.append('Type not compatible with ops {}'.format(self.ops))
+            # if lhs and rhs are both NOT pointer
             else:
                 if self.rhs.expr_type._type == self.lhs.expr_type._type:
                     if self.rhs.expr_type._type in self.ops_type[self.ops]:
@@ -341,9 +341,11 @@ class UnaryExpr(OpExpr):
         ref_count = 0
         inferred_type = 'int'
 
+        # sizeof ops
         if self.ops == 'sizeof':
             inferred_type = 'int'
             ref_count = 0
+        # arithmetic ops
         elif self.ops in ['--', '++', '+', '-']:
             if self.rhs.expr_type.ref_count == 0:
                 if self.rhs.expr_type._type not in self.ops_type[self.ops]:
@@ -357,20 +359,21 @@ class UnaryExpr(OpExpr):
                     compilation_err.append('wrong type argument to unary minus')
                 inferred_type = self.rhs.expr_type._type
                 ref_count = self.rhs.expr_type.ref_count
-
+        # bool ops
         elif self.ops in ['!', '~']:
             if self.rhs.expr_type._type not in self.ops_type[self.ops]:
                 compilation_err.append('Type not compatible with ops {}'.format(self.ops)) 
             
             inferred_type = 'int'
             ref_count = 0
+        # error reporting
         else:
             if not isinstance(self.rhs, Identifier):
                 compilation_err('RHS should be an indentifier')
 
             ref_count = self.rhs.expr_type.ref_count \
                 + (1 if self.ops == '&' else -1)    
-            
+
             inferred_type = self.rhs.expr_type._type
         
         self.expr_type = VarType(ref_count, inferred_type)
@@ -387,6 +390,7 @@ class PostfixExpr(OpExpr):
         inferred_type = 'int'
         arr_offset = []
 
+        # arithmetic ops
         if self.ops in ['--', '++']:
             if self.lhs.expr_type.ref_count == 0:
                 if self.lhs.expr_type._type not in self.ops_type[self.ops]:
@@ -400,7 +404,7 @@ class PostfixExpr(OpExpr):
                 inferred_type = self.lhs.expr_type._type
                 ref_count = self.lhs.expr_type.ref_count
 
-        # struct deference child 
+        # struct child accessing 
         elif self.ops == '.':
             if isinstance(self.lhs.expr_type, StructType):
                 if self.lhs.expr_type._type.is_defined():
@@ -475,6 +479,12 @@ class CastExpr(BaseExpr):
                     compilation_err.append('Cannot convert float to pointer')
             else:
                 self.expr_type = self.type
+    
+    @staticmethod
+    def _gen_dot(obj):
+        dot_list = ['Type Casting', obj.type._gen_dot(obj.type)]
+        dot_list.append(obj.expr._gen_dot(obj.expr))
+        return dot_list
 
 class AssignExpr(OpExpr):
     def __init__(self, lhs, ops, rhs):
@@ -483,7 +493,7 @@ class AssignExpr(OpExpr):
     def get_type(self):
         
         # compatability is checked in CastExpr
-        self.rhs = CastExpr(self.lhs.expr_type, self.lhs)
+        self.rhs = CastExpr(self.rhs.expr_type, self.rhs)
         self.expr_type = self.lhs.expr_type
 
 class CondExpr(BaseExpr):
@@ -536,6 +546,8 @@ class InitDeclarator(_BaseDecl):
                 if self.expr_type.ref_count + len(self.expr_type.arr_offset) == 0:
                     if self.initializer.expr_type._type == parser_type:
                         pass
+
+                    
                     else:
                         self.initializer = CastExpr(self.expr_type, self.initializer)
                 else:
@@ -647,8 +659,6 @@ class DeclarationSpecifier(Specifier):
 
         if isinstance(self.type_spec, StructUnionSpecifier):
             self.type_spec = self.type_spec.struct_type
-        elif isinstance(self.type_spec, Identifier):
-            raise Exception('Aliases not supported')
 
 class StructDeclaration(_BaseDecl):
     def __init__(
@@ -809,12 +819,13 @@ class CompoundStmt(Statement):
     def _gen_dot(obj):
         """Get a list of node and edge declarations."""
         dot_list = ['CompoundStmt']
-        
         for decl in obj.decl_list:
             dot_list.append(decl._gen_dot(decl))
         
         for stmt in obj.stmt_list:
             dot_list.append(stmt._gen_dot(stmt))
+        
+        return dot_list
         
 
 class ExprStmt(Statement):
@@ -875,8 +886,19 @@ class Start(Node):
                 
         return dot_list
 
-    def gen_dot(self, graph, node_idx=0):
+    def gen_dot(self, graph):
         """Get a list of node and edge declarations."""
+
+        def leaf_redundancy(tree):
+            if isinstance(tree,list) and len(tree) == 1:
+                return tree[0]
+            elif isinstance(tree,list) and len(tree) > 1:
+                newList = tree[:1]
+                for child in tree[1:]:
+                    newList.append(leaf_redundancy(child))
+                return newList
+            else:
+                return tree
 
         def remove_redundancy(tree):
             newList = tree[:1]
@@ -888,13 +910,13 @@ class Start(Node):
                         newList.append(child)
                 elif type(child) is str:
                     newList.append(child)
-                # else:
-                #     raise Exception('remove: Invalid type {}'.format(type(child)))
+                else:
+                    raise Exception('remove: Invalid type {}'.format(type(child)))
                 
-            # if len(newList) == 1:
-            #     return []
-            # if len(newList) == 2:
-            #     return newList[1]
+            if len(newList) == 1:
+                return []
+            if len(newList) == 2:
+                return newList[1]
             
             return newList
 
@@ -915,10 +937,20 @@ class Start(Node):
             else:
                 raise Exception('Invalid type {}'.format(type(tree)))
 
-        tree = self._gen_dot(self)
+        
+        syn_tree = self._gen_dot(self)
+        tree = leaf_redundancy(syn_tree)
         AST = remove_redundancy(tree)
-        generate_dot(graph, AST, node_idx)
-        return tree
+
+        if AST == [] or AST is None or AST[0] != 'Start':
+            AST = ['Start', AST]
+        
+        generate_dot(graph, AST, 0)
+        graph.get_node('0')[0].set_shape('doubleoctagon')
+        graph.get_node('0')[0].set_color('orange')
+        graph.get_node('0')[0].set_style('filled')
+    
+        return AST
 
 
 class FuncDef(Node):
@@ -942,7 +974,6 @@ class FuncDef(Node):
     @staticmethod
     def _gen_dot(obj):
         """Get a list of node and edge declarations."""
-
         dot_list = ['FuncDef']
         
         # ret_type
