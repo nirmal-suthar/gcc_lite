@@ -363,12 +363,18 @@ def p_constant_expression(p):
 
 def p_declaration(p):
     ''' declaration	: declaration_specifiers ';'
-	        | declaration_specifiers init_declarator_list ';'
     '''
-    if len(p) == 3:
-        p[0] = Declaration(p[1], [])
-    else:
-        p[0] = Declaration(p[1], p[2])
+    p[0] = Declaration(p[1], [])
+
+def p_declaration_1(p):
+    ''' declaration	: declaration_declarator ';'
+    '''
+    p[0] = p[1]
+
+def p_declaration_declarator(p):
+    ''' declaration_declarator	: declaration_specifiers init_declarator_list
+    '''
+    p[0] = Declaration(p[1], p[2])
 
 def p_declaration_specifiers(p):
     ''' declaration_specifiers : storage_class_specifier type_specifier
