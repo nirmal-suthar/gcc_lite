@@ -7,7 +7,6 @@ except:
 
 from ply import yacc
 from lexer import lexer, tokens
-from parser_class import *
 
 
 class bcolors:
@@ -49,7 +48,7 @@ def p_push_scope(p):
     if isinstance(p[-2], ScopeName):
         symtable.push_scope(p[-2].name)
         if p[-2].name == 'Function':
-            for name, _type in p[-3]:
+            for name, _type in p[-3][3]:
                 symtable.add_var(name, _type)
     else:
         symtable.push_scope()
@@ -80,7 +79,7 @@ def p_error(p):
         + 1
     )
     print(bcolors.BOLD+'{}:{}:{}:'.format(p.lexer.filename,p.lineno, position)+bcolors.ENDC,end='')
-    print(bcolors.FAIL+' SyntaxError: '+bcolors.ENDC,'Unexpected token {}'.format(p.value))
+    print(bcolors.FAIL+' SyntaxError: '+bcolors.ENDC,p.error)
     print('     {} |{}'.format(p.lineno,p.lexer.lines[p.lineno - 1][:position-1]),end='')
     print(bcolors.WARNING + bcolors.UNDERLINE + '{}'.format(
         p.lexer.lines[p.lineno - 1][position-1:position-1+len(p.value)]
@@ -395,9 +394,9 @@ def p_init_declarator(p):
             | function_declarator
     '''
     if len(p) == 2:
-        p[0] = InitDeclarator(p[1], parser_type=p.type, is_typedef=p.is_typedef)
+        p[0] = InitDeclarator(p[1])
     else:
-        p[0] = InitDeclarator(p[1], p[3], parser_type=p.type, is_typedef=p.is_typedef)
+        p[0] = InitDeclarator(p[1], p[3])
 
 def p_storage_class_specifier(p):
     ''' storage_class_specifier : TYPEDEF
@@ -737,19 +736,25 @@ def p_translation_unit(p):
         p[0] = p[1] + [p[2]]
 
 def p_external_declaration(p):
-    ''' external_declaration : function_definition
+    ''' external_declaration : function_definition func_scope compound_statement
 	        | declaration
     '''
-    p[0] = p[1]
+    if len(p) == 2:
+        p[0] = p[1]
+    else:
+        p1, p2, p3, p4 = p[1]
+        p[0] = FuncDef(p1, p2, p3, p4, p[3])
 
 def p_function_definition(p):
-    ''' function_definition : declaration_specifiers IDENTIFIER param_list func_scope compound_statement
-        | declaration_specifiers pointer IDENTIFIER param_list func_scope compound_statement
+    ''' function_definition : declaration_specifiers IDENTIFIER param_list 
+        | declaration_specifiers pointer IDENTIFIER param_list
     '''
-    if len(p) == 6:
-        p[0] = FuncDef(p[1], 0, p[2], p[3], p[5])
+    if len(p) == 4:
+        p[0] = (p[1], 0, p[2], p[3])
+        symtable.add_func(Function(VarType(0, p[1].type_spec), p[2], p[3]))
     else:
-        p[0] = FuncDef(p[1], p[2], p[3], p[4], p[6])
+        p[0] = (p[1], p[2], p[3], p[4])
+        symtable.add_func(Function(VarType(p[2], p[1].type_spec), p[3], p[4]))
 
 
 # def _parse(ifile):
@@ -769,3 +774,6 @@ def p_function_definition(p):
 parser = yacc.yacc()
 parser.type = None
 parser.is_typedef = False
+parser.error = ''
+
+from parser_class import *

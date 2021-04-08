@@ -7,6 +7,14 @@ from os import removedirs
 from typing import Union, List
 import pydot
 from helper import *
+from parser import parser, lexer, bcolors
+
+def parser_error():
+    
+    print(bcolors.BOLD+'{}:{}:'.format(lexer.filename,lexer.lineno)+bcolors.ENDC,end='')
+    print(bcolors.FAIL+' SyntaxError: '+bcolors.ENDC,parser.error)
+    print('     {} |{}'.format(lexer.lineno,lexer.lines[lexer.lineno - 1]))
+
 
 # #############################################################################
 # Misc.            
@@ -94,7 +102,7 @@ class StructType(_BASENODE):
         raise Exception('TODO')
 
 class Function(_BASENODE):
-    def __init__(self, ret_type, name, args):
+    def __init__(self, ret_type, name, args, is_defined=False):
         super().__init__()
         self.ret_type = ret_type    # should be VarType
         self.name = name            # str
@@ -102,8 +110,6 @@ class Function(_BASENODE):
     
     def __str__(self):
         return 'Function(ret_type={}, name={}, args={})'.format(str(self.ret_type), self.name, self.args)
-    
-    # def is_defined(self):
 
 
 class VarType(_BASENODE):
@@ -231,6 +237,8 @@ class Const(BaseExpr):
             self.expr_type = VarType(1, 'char')
         else:
             compilation_err.append('Unknown Constant type')
+            parser.error = compilation_err[-1]
+            parser_error()
 
     @staticmethod
     def _gen_dot(obj):
@@ -251,6 +259,8 @@ class Identifier(BaseExpr):
                 _var = symtable.lookup_struct(self.name)
                 if _var is None:
                     compilation_err.append('Undeclared Variable {}'.format(self.name))
+                    parser.error = compilation_err[-1]
+                    parser_error()
                 else:
                     self.expr_type = _var
             else:
@@ -283,6 +293,8 @@ class OpExpr(BaseExpr):
             self.rhs.expr_type._type not in self.ops_type[self.ops]
         ):
             compilation_err.append('Type not compatible with ops {}'.format(self.ops))
+            parser.error(compilation_err[-1])
+            parser_error()
 
         # if lhs is pointer
         if self.lhs.expr_type.ref_count > 0:
@@ -293,18 +305,33 @@ class OpExpr(BaseExpr):
                     ref_count = 0
                 else:
                     compilation_err.append('Type not compatible with ops {}'.format(self.ops))
+                    parser.error = compilation_err[-1]
+                    parser_error()
             # lhs is pointer and rhs is int => pointer add and sub
             else:
-                if self.rhs.expr_type._type == 'int':
+                if self.rhs.expr_type._type == 'int' or self.rhs.expr_type._type == 'char':
                     inferred_type = self.lhs.expr_type._type
                     ref_count = self.lhs.expr_type.ref_count
                 else:
                     compilation_err.append('Type not compatible with ops {}'.format(self.ops))
+                    parser.error = compilation_err[-1]
+                    parser_error()
         # if lhs is not pointer
         else:
-            # FIXME: 1 + (int*)a works but not handled
+            # FIXED: 1 + (int*)a works and handled
             if self.rhs.expr_type.ref_count > 0:
-                compilation_err.append('Type not compatible with ops {}'.format(self.ops))
+                if self.ops in ['+']:
+                    if self.lhs.expr_type._type == 'int' or self.lhs.expr_type._type == 'char':
+                        inferred_type = self.rhs.expr_type._type
+                        ref_count = self.rhs.expr_type.ref_count
+                    else:
+                        compilation_err.append('Type not compatible with ops {}'.format(self.ops))
+                        parser.error = compilation_err[-1]
+                        parser_error()
+                else:
+                    compilation_err.append('Type not compatible with ops {}'.format(self.ops))
+                    parser.error = compilation_err[-1]
+                    parser_error()
             # if lhs and rhs are both NOT pointer
             else:
                 if self.rhs.expr_type._type == self.lhs.expr_type._type:
@@ -313,6 +340,8 @@ class OpExpr(BaseExpr):
                         ref_count = self.lhs.expr_type.ref_count
                     else:
                         compilation_err.append('Type not compatible with ops {}'.format(self.ops))
+                        parser.error = compilation_err[-1]
+                        parser_error()
                 else:
                     if self.rhs.expr_type._type in self.ops_type[self.ops]:
                         if self.lhs.expr_type._type in self.ops_type[self.ops]:
@@ -326,8 +355,12 @@ class OpExpr(BaseExpr):
                             self.rhs = CastExpr(VarType(ref_count, inferred_type), self.rhs)
                         else:
                             compilation_err.append('Type not compatible with ops {}'.format(self.ops))
+                            parser.error = compilation_err[-1]
+                            parser_error()
                     else:
                         compilation_err.append('Type not compatible with ops {}'.format(self.ops))
+                        parser.error = compilation_err[-1]
+                        parser_error()
 
         self.expr_type = VarType(ref_count, inferred_type)
 
@@ -350,6 +383,8 @@ class UnaryExpr(OpExpr):
             if self.rhs.expr_type.ref_count == 0:
                 if self.rhs.expr_type._type not in self.ops_type[self.ops]:
                     compilation_err.append('Type not compatible with ops {}'.format(self.ops)) 
+                    parser.error = compilation_err[-1]
+                    parser_error()
                 
                 inferred_type = 'int'
                 ref_count = 0
@@ -357,24 +392,36 @@ class UnaryExpr(OpExpr):
             else:
                 if self.ops in ['-', '+']:
                     compilation_err.append('wrong type argument to unary minus')
+                    parser.error = compilation_err[-1]
+                    parser_error()
                 inferred_type = self.rhs.expr_type._type
                 ref_count = self.rhs.expr_type.ref_count
         # bool ops
         elif self.ops in ['!', '~']:
             if self.rhs.expr_type._type not in self.ops_type[self.ops]:
                 compilation_err.append('Type not compatible with ops {}'.format(self.ops)) 
+                parser.error = compilation_err[-1]
+                parser_error()
             
             inferred_type = 'int'
             ref_count = 0
         # error reporting
-        else:
+        elif self.ops == '*':
+            if self.rhs.expr_type.ref_count > 0:
+                inferred_type = self.rhs.expr_type._type
+                ref_count = self.rhs.expr_type.ref_count - 1
+            else:
+                compilation_err.append('Can not dereference a non pointer') 
+                parser.error = compilation_err[-1]
+                parser_error()
+        elif self.ops == '&':
             if not isinstance(self.rhs, Identifier):
-                compilation_err('RHS should be an indentifier')
-
-            ref_count = self.rhs.expr_type.ref_count \
-                + (1 if self.ops == '&' else -1)    
-
-            inferred_type = self.rhs.expr_type._type
+                compilation_err.append('RHS should be an indentifier')
+                parser.error = compilation_err[-1]
+                parser_error()
+            else:
+                ref_count = self.rhs.expr_type.ref_count + 1
+                inferred_type = self.rhs.expr_type._type
         
         self.expr_type = VarType(ref_count, inferred_type)
 
@@ -395,6 +442,8 @@ class PostfixExpr(OpExpr):
             if self.lhs.expr_type.ref_count == 0:
                 if self.lhs.expr_type._type not in self.ops_type[self.ops]:
                     compilation_err.append('Type not compatible with ops {}'.format(self.ops)) 
+                    parser.error = compilation_err[-1]
+                    parser_error()
                 
                 inferred_type = 'int'
                 ref_count = 0
@@ -406,17 +455,41 @@ class PostfixExpr(OpExpr):
 
         # struct child accessing 
         elif self.ops == '.':
-            if isinstance(self.lhs.expr_type, StructType):
+            if isinstance(self.lhs.expr_type._type, StructType) and self.lhs.expr_type.ref_count == 0:
                 if self.lhs.expr_type._type.is_defined():
                     struct_var = self.lhs.expr_type._type.variables.get(self.rhs, None)
                     if struct_var is None:
                         compilation_err.append('{} has no member named {}'.format(self.lhs.expr_type._type.name, self.rhs))
+                        parser.error = compilation_err[-1]
+                        parser_error()
                     inferred_type = struct_var._type
                     ref_count = struct_var.ref_count
                 else:
                     compilation_err.append('Incomplete struct {}'.format(self.lhs.expr_type._type.name))
+                    parser.error = compilation_err[-1]
+                    parser_error()
             else:
                 compilation_err.append('Dereferencing invalid struct type')
+                parser.error = compilation_err[-1]
+                parser_error()
+        elif self.ops == '->':
+            if self.lhs.expr_type.ref_count == 1 and isinstance(self.lhs.expr_type._type, StructType):
+                if self.lhs.expr_type._type.is_defined():
+                    struct_var = self.lhs.expr_type._type.variables.get(self.rhs, None)
+                    if struct_var is None:
+                        compilation_err.append('{} has no member named {}'.format(self.lhs.expr_type._type.name, self.rhs))
+                        parser.error = compilation_err[-1]
+                        parser_error()
+                    inferred_type = struct_var._type
+                    ref_count = struct_var.ref_count
+                else:
+                    compilation_err.append('Incomplete struct {}'.format(self.lhs.expr_type._type.name))
+                    parser.error = compilation_err[-1]
+                    parser_error()
+            else:
+                compilation_err.append('Dereferencing invalid struct type')
+                parser.error = compilation_err[-1]
+                parser_error()
         # function calling
         elif self.ops == '(':
             arg_list = [] if self.rhs is None else self.rhs
@@ -425,14 +498,20 @@ class PostfixExpr(OpExpr):
                 func = self.lhs.expr_type
                 if func is None:
                     compilation_err.append('{} is not callable'.format(self.lhs))
+                    parser.error = compilation_err[-1]
+                    parser_error()
 
                 if len(arg_list) == len(func.args):
                     inferred_type = func.ret_type._type
                     ref_count = func.ret_type.ref_count
                 else:
                     compilation_err.append('too few/many arguments to function {}'.format(func.name))
+                    parser.error = compilation_err[-1]
+                    parser_error()
             else:
                 compilation_err.append('called object is not a function or function pointer')
+                parser.error = compilation_err[-1]
+                parser_error()
             
         # array reference
         elif self.ops == '[':
@@ -450,8 +529,12 @@ class PostfixExpr(OpExpr):
                         ref_count = self.lhs.expr_type.ref_count - 1
                 else:
                     compilation_err.append('Subscripted value is neither array nor pointer')
+                    parser.error = compilation_err[-1]
+                    parser_error()
             else:
                 compilation_err.append('Array subscript is not an integer')
+                parser.error = compilation_err[-1]
+                parser_error()
         
         self.expr_type = VarType(ref_count, inferred_type, arr_offset)
             
@@ -471,12 +554,16 @@ class CastExpr(BaseExpr):
                     self.expr_type = self.type
                 else:
                     compilation_err.append('Cannot convert pointer to float')
+                    parser.error = compilation_err[-1]
+                    parser_error()
         else:
             if self.type.ref_count > 0:
                 if self.expr.expr_type._type in ['int', 'char']:
                     self.expr_type = self.type
                 else:
                     compilation_err.append('Cannot convert float to pointer')
+                    parser.error = compilation_err[-1]
+                    parser_error()
             else:
                 self.expr_type = self.type
     
@@ -527,15 +614,17 @@ class _BaseDecl(_BASENODE):
     
 
 class InitDeclarator(_BaseDecl):
-    def __init__(self, declarator, initializer=None, parser_type=None, is_typedef=False):
+    def __init__(self, declarator, initializer=None):
         super().__init__('TODO')
 
         self.declarator = declarator
         self.initializer = initializer
-        self.expr_type = VarType(self.declarator.ref_count, parser_type, self.declarator.arr_offset)
+        self.expr_type = VarType(self.declarator.ref_count, parser.type, self.declarator.arr_offset)
 
-        if self.initializer is not None and is_typedef:
+        if self.initializer is not None and parser.is_typedef:
             compilation_err.append('can not initialize typedef {}', self.declarator.name)
+            parser.error = compilation_err[-1]
+            parser_error()
 
         if self.initializer is not None:
             
@@ -544,7 +633,7 @@ class InitDeclarator(_BaseDecl):
             
             if self.initializer.expr_type.ref_count == 0:
                 if self.expr_type.ref_count + len(self.expr_type.arr_offset) == 0:
-                    if self.initializer.expr_type._type == parser_type:
+                    if self.initializer.expr_type._type == parser.type:
                         pass
 
                     
@@ -553,12 +642,16 @@ class InitDeclarator(_BaseDecl):
                 else:
                     if self.initializer.expr_type._type == 'float':
                         compilation_err.append('Can not assign float to pointer')
+                        parser.error = compilation_err[-1]
+                        parser_error()
                     else:
                         self.initializer = CastExpr(self.expr_type, self.initializer)
             else:
                 if self.expr_type.ref_count + len(self.expr_type.arr_offset) == 0:
                     if self.expr_type._type == 'float':
                         compilation_err.append('Can not typecast pointer to float')
+                        parser.error = compilation_err[-1]
+                        parser_error()
                     else:
                         self.initializer = CastExpr(self.expr_type, self.initializer)
                 else:
@@ -632,18 +725,26 @@ class StructUnionSpecifier(Specifier):
                 # Sanity checking of arr offset
                 if not all(map(lambda x: isinstance(x, Const) and x.dvalue=='int', decl.arr_offset)):
                     compilation_err.append('Only Int constant in array declaration')
+                    parser.error = compilation_err[-1]
+                    parser_error()
 
                 # void declaration checking
                 if is_void and vartype.ref_count==0:
                     compilation_err.append('cannot assign variable of type void')
+                    parser.error = compilation_err[-1]
+                    parser_error()
                 
                 # struct declaration checking
                 if is_struct and d_type.is_defined() and vartype.ref_count==0:
                     compilation_err.append('storage of struct named {} not avaiable'.format(d_type.name))
+                    parser.error = compilation_err[-1]
+                    parser_error()
 
                 # Add declaration in variables
                 if decl.name in self.variables:
                     compilation_err.append('Redeclaration of variable named {} inside struct'.format(decl.name))
+                    parser.error = compilation_err[-1]
+                    parser_error()
 
                 self.variables[decl.name] = vartype
 
@@ -737,13 +838,19 @@ class Declaration(_BaseDecl):
                 # Sanity checking of arr offset
                 if not all(map(lambda x: isinstance(x, Const) and x.dvalue=='int', decl.arr_offset)):
                     compilation_err.append('Only Int constant in array declaration')
+                    parser.error = compilation_err[-1]
+                    parser_error()
 
                 if self.is_void and vartype.ref_count==0:
                     compilation_err.append('cannot assign variable of type void')
+                    parser.error = compilation_err[-1]
+                    parser_error()
                 
                 # struct declaration checking
                 if self.is_struct and _type.is_defined() and vartype.ref_count==0:
                     compilation_err.append('storage of struct named {} not avaiable'.format(_type.name))
+                    parser.error = compilation_err[-1]
+                    parser_error()
 
                 # Add declaration in symtab
                 symtable.add_typedef(decl.name, vartype)
@@ -763,13 +870,19 @@ class Declaration(_BaseDecl):
             # Sanity checking of arr offset
             if not all(map(lambda x: isinstance(x, Const) and x.dvalue=='int', decl.arr_offset)):
                 compilation_err.append('Only Int constant in array declaration')
+                parser.error = compilation_err[-1]
+                parser_error()
 
             if self.is_void and vartype.ref_count==0:
                 compilation_err.append('cannot assign variable of type void')
+                parser.error = compilation_err[-1]
+                parser_error()
             
             # struct declaration checking
             if self.is_struct and _type.is_defined() and vartype.ref_count==0:
                 compilation_err.append('storage of struct named {} not avaiable'.format(_type.name))
+                parser.error = compilation_err[-1]
+                parser_error()
 
             # Add declaration in symtab
             symtable.add_var(decl.name, vartype, self.is_static)
@@ -969,7 +1082,7 @@ class FuncDef(Node):
         self.param_list = param_list
         self.stmt = stmt
         self.vartype = VarType(self.ref_count, self.specifier.type_spec)
-        symtable.add_func(Function(self.vartype, self.name, self.param_list))
+        # symtable.add_func(Function(self.vartype, self.name, self.param_list))
 
     @staticmethod
     def _gen_dot(obj):
