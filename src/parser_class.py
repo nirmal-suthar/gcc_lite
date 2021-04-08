@@ -14,7 +14,7 @@ def parser_error():
     print(bcolors.BOLD+'{}:{}:'.format(lexer.filename,lexer.lineno)+bcolors.ENDC,end='')
     print(bcolors.FAIL+' SyntaxError: '+bcolors.ENDC,parser.error)
     print('     {} |{}'.format(lexer.lineno,lexer.lines[lexer.lineno - 1]))
-
+    raise SyntaxError
 
 
 # #############################################################################
@@ -103,14 +103,15 @@ class StructType(_BASENODE):
         raise Exception('TODO')
 
 class Function(_BASENODE):
-    def __init__(self, ret_type, name, args, is_defined=False):
+    def __init__(self, ret_type, name, args, is_ellipsis=False, is_defined=False):
         super().__init__()
-        self.ret_type = ret_type    # should be VarType
-        self.name = name            # str
-        self.args = args            # list
+        self.ret_type = ret_type        # should be VarType
+        self.name = name                # str
+        self.args = args                # list
+        self.is_ellipsis = is_ellipsis  # is_ellipsis function
     
     def __str__(self):
-        return 'Function(ret_type={}, name={}, args={})'.format(str(self.ret_type), self.name, self.args)
+        return 'Function(ret_type={}, name={}, args={}, is_ellipsis={})'.format(str(self.ret_type), self.name, self.args, self.is_ellipsis)
 
 
 class VarType(_BASENODE):
@@ -320,7 +321,7 @@ class OpExpr(BaseExpr):
                     parser_error()
         # if lhs is not pointer
         else:
-            # FIXED: 1 + (int*)a works and handled
+            # lhs is int and rhs is pointer
             if self.rhs.expr_type.ref_count > 0:
                 if self.ops in ['+']:
                     if self.lhs.expr_type._type == 'int' or self.lhs.expr_type._type == 'char':
@@ -474,6 +475,7 @@ class PostfixExpr(OpExpr):
                 compilation_err.append('Dereferencing invalid struct type')
                 parser.error = compilation_err[-1]
                 parser_error()
+        # struct deferencing child
         elif self.ops == '->':
             if self.lhs.expr_type.ref_count == 1 and isinstance(self.lhs.expr_type._type, StructType):
                 if self.lhs.expr_type._type.is_defined():
@@ -779,10 +781,9 @@ class StructDeclarator(_BaseDecl):
     def __init__(self, declarator, expr=None):
         super().__init__('TODO')
         self.declarator = declarator
-        self.constexpr = expr
-
-        if self.constexpr is not None:
-            raise Exception('not supported')
+        # FIXME: const expr set to None for simpler behaviour
+        self.constexpr = None
+        # self.constexpr = expr
 
 class Declarator(_BaseDecl):
     def __init__(self, ref_count, name, arr_offset):
@@ -801,12 +802,14 @@ class FuncDirectDecl(_BaseDecl):
         self, 
         ref_count: int, 
         name: str, 
-        param_list: List[tuple]
+        param_list: List[tuple],
+        is_ellipsis: bool = False
     ):
         super().__init__('TODO')
         self.ref_count = ref_count
         self.name = name
         self.param_list = param_list
+        self.is_ellipsis = is_ellipsis
 
 class Declaration(_BaseDecl):
     def __init__(
@@ -833,7 +836,7 @@ class Declaration(_BaseDecl):
                 if isinstance(decl, FuncDirectDecl):    
                     vartype = VarType(decl.ref_count, _type)
                     # add alias as a function type
-                    symtable.add_typedef(decl.name, Function(vartype, decl.name, decl.param_list))
+                    symtable.add_typedef(decl.name, Function(vartype, decl.name, decl.param_list, decl.is_ellipsis))
                     continue
 
                 vartype = VarType(decl.ref_count, _type, decl.arr_offset)
@@ -973,6 +976,18 @@ class JumpStmt(Statement):
         self.jump_type = jump_type
         self.expr = expr
 
+        if self.jump_type == 'break':
+            if symtable.check_break_scope():
+                compilation_err.append('break not allowed without loop or switch')
+                parser.error = compilation_err[-1]
+                parser_error()
+        elif self.jump_type == 'continue':
+            if symtable.check_continue_scope():
+                compilation_err.append('continue not allowed without loop')
+                parser.error = compilation_err[-1]
+                parser_error()
+
+
 # #############################################################################
 # External declaration and function definitions            
 # #############################################################################
@@ -1077,7 +1092,8 @@ class FuncDef(Node):
         ref_count: int, 
         name: str, 
         param_list: List[tuple], 
-        stmt: CompoundStmt
+        stmt: CompoundStmt,
+        is_ellipsis: bool = False
     ):
         super().__init__('Function Definition')
         self.specifier = specifier
@@ -1086,6 +1102,7 @@ class FuncDef(Node):
         self.param_list = param_list
         self.stmt = stmt
         self.vartype = VarType(self.ref_count, self.specifier.type_spec)
+        self.is_ellipsis = is_ellipsis
         # symtable.add_func(Function(self.vartype, self.name, self.param_list))
 
     @staticmethod

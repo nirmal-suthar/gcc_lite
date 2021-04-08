@@ -43,8 +43,24 @@ class SymbolTable():
     def cur_scope(self):
         assert len(self.scope_stack) >= 1
         return self.scope_stack[-1]
+    
+    def check_break_scope(self):
+        scope = self.cur_scope()
+        while scope:
+            if scope.metadata in ['Loop', 'Switch']:
+                return True
+            scope = scope.parent
+        return False
 
-    def push_scope(self, scope_type='TODO') -> None:
+    def check_continue_scope(self):
+        scope = self.cur_scope()
+        while scope:
+            if scope.metadata in ['Loop']:
+                return True
+            scope = scope.parent
+        return False
+
+    def push_scope(self, scope_type='Other') -> None:
         new_scope = ScopeTable(self.cur_depth(), self.scope_stack[-1], len(self.all_scope), scope_type)
         self.all_scope.append(new_scope)
         self.scope_stack.append(new_scope)

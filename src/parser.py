@@ -48,7 +48,7 @@ def p_push_scope(p):
     if isinstance(p[-2], ScopeName):
         symtable.push_scope(p[-2].name)
         if p[-2].name == 'Function':
-            for name, _type in p[-3][3]:
+            for name, _type in p[-3][3][0]:
                 symtable.add_var(name, _type)
     else:
         symtable.push_scope()
@@ -71,6 +71,11 @@ def p_loop_scope(p):
     '''
     p[0] = ScopeName('Loop')
 
+def p_switch_scope(p):
+    ''' switch_scope : empty
+    '''
+    p[0] = ScopeName('Switch')
+
 def p_error(p):
     position = (
         p.lexer.lexpos
@@ -79,7 +84,7 @@ def p_error(p):
         + 1
     )
     print(bcolors.BOLD+'{}:{}:{}:'.format(p.lexer.filename,p.lineno, position)+bcolors.ENDC,end='')
-    print(bcolors.FAIL+' SyntaxError: '+bcolors.ENDC,p.error)
+    print(bcolors.FAIL+' SyntaxError: '+bcolors.ENDC,'Unexpected token {}'.format(p.value))
     print('     {} |{}'.format(p.lineno,p.lexer.lines[p.lineno - 1][:position-1]),end='')
     print(bcolors.WARNING + bcolors.UNDERLINE + '{}'.format(
         p.lexer.lines[p.lineno - 1][position-1:position-1+len(p.value)]
@@ -473,7 +478,6 @@ def p_struct_declarator_list(p):
 
 def p_struct_declarator(p):
     ''' struct_declarator : declarator
-        |   declarator ':' constant_expression
     '''
 
     if len(p) == 2:
@@ -513,7 +517,7 @@ def p_param_list(p):
             | '(' ')'
     '''
     if len(p) == 3:
-        p[0] = []
+        p[0] = ([],False)
     else:
         p[0] = p[2]  
 
@@ -522,9 +526,11 @@ def p_function_declarator(p):
             | pointer IDENTIFIER '(' parameter_type_list ')'
     '''
     if len(p)==5:
-        p[0] = FuncDirectDecl(0, p[1], p[3])
+        (param_list, is_ellipsis) = p[3]
+        p[0] = FuncDirectDecl(0, p[1], param_list, is_ellipsis)
     else:
-        p[0] = FuncDirectDecl(p[1], p[2], p[4])
+        (param_list, is_ellipsis) = p[4]
+        p[0] = FuncDirectDecl(p[1], p[2], param_list, is_ellipsis)
         
 
 def p_pointer(p):
@@ -541,9 +547,9 @@ def p_parameter_type_list(p):
             | parameter_list ',' ELLIPSIS
     '''
     if len(p) == 2:
-        p[0] = p[1]
+        p[0] = (p[1], False)
     else:
-        p[0] = p[1] + [(p[3],None)]
+        p[0] = (p[1], True)
 
 def p_parameter_list(p):
     ''' parameter_list : parameter_declaration
@@ -692,7 +698,7 @@ def p_expression_statement(p):
 def p_selection_statement(p):
     ''' selection_statement : IF '(' expression ')' statement %prec IFX
             | IF '(' expression ')' statement ELSE statement
-            | SWITCH '(' expression ')' statement
+            | SWITCH '(' expression ')' switch_scope statement
     '''
     if len(p)==6:
         p[0] = SelectionStmt(p[1], p[3], p[5])
@@ -742,8 +748,8 @@ def p_external_declaration(p):
     if len(p) == 2:
         p[0] = p[1]
     else:
-        p1, p2, p3, p4 = p[1]
-        p[0] = FuncDef(p1, p2, p3, p4, p[3])
+        p1, p2, p3, (p4, is_ellipsis) = p[1]
+        p[0] = FuncDef(p1, p2, p3, p4, p[3], is_ellipsis)
 
 def p_function_definition(p):
     ''' function_definition : declaration_specifiers IDENTIFIER param_list 
@@ -751,10 +757,10 @@ def p_function_definition(p):
     '''
     if len(p) == 4:
         p[0] = (p[1], 0, p[2], p[3])
-        symtable.add_func(Function(VarType(0, p[1].type_spec), p[2], p[3]))
+        symtable.add_func(Function(VarType(0, p[1].type_spec), p[2], p[3][0], p[3][1]))
     else:
         p[0] = (p[1], p[2], p[3], p[4])
-        symtable.add_func(Function(VarType(p[2], p[1].type_spec), p[3], p[4]))
+        symtable.add_func(Function(VarType(p[2], p[1].type_spec), p[3], p[4][0], p[4][1]))
 
 
 # def _parse(ifile):
