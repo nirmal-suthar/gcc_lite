@@ -47,9 +47,10 @@ def p_push_scope(p):
     '''
     if isinstance(p[-2], ScopeName):
         symtable.push_scope(p[-2].name)
-        if p[-2].name == 'Function':
-            for name, _type in p[-3][3][0]:
-                symtable.add_var(name, _type)
+    elif isinstance(p[-2], tuple):
+        symtable.push_scope('Function')
+        for name, _type in p[-2][3][0]:
+            symtable.add_var(name, _type)
     else:
         symtable.push_scope()
 
