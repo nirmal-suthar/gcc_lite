@@ -123,7 +123,6 @@ class SymbolTable():
                 writer.writerow(row)
                 idx += 1
             
-            print(len(self.all_scope))
             for _ in range(len(self.all_scope)):
                 cur_scope = self.all_scope[scope_id]
                 for key in cur_scope.structs:

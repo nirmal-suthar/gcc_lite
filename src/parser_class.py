@@ -16,6 +16,7 @@ def parser_error():
     print('     {} |{}'.format(lexer.lineno,lexer.lines[lexer.lineno - 1]))
 
 
+
 # #############################################################################
 # Misc.            
 # #############################################################################
@@ -267,6 +268,7 @@ class Identifier(BaseExpr):
                 self.expr_type = _var
         else:
             self.expr_type = _var
+        # print(self.name, self.expr_type)
 
 class OpExpr(BaseExpr):
     def __init__(
@@ -475,6 +477,7 @@ class PostfixExpr(OpExpr):
         elif self.ops == '->':
             if self.lhs.expr_type.ref_count == 1 and isinstance(self.lhs.expr_type._type, StructType):
                 if self.lhs.expr_type._type.is_defined():
+                    # print(self.lhs.expr_type)
                     struct_var = self.lhs.expr_type._type.variables.get(self.rhs, None)
                     if struct_var is None:
                         compilation_err.append('{} has no member named {}'.format(self.lhs.expr_type._type.name, self.rhs))
@@ -701,7 +704,7 @@ class StructUnionSpecifier(Specifier):
             if lookup_type is None:
                 struct_type = StructType(self.name, None)
             else:
-                struct_type = StructType(self.name, lookup_type)
+                struct_type = lookup_type
             
         self.struct_type = struct_type
 
@@ -735,7 +738,8 @@ class StructUnionSpecifier(Specifier):
                     parser_error()
                 
                 # struct declaration checking
-                if is_struct and d_type.is_defined() and vartype.ref_count==0:
+                if is_struct and not d_type.is_defined() and vartype.ref_count==0:
+                    # print(1, is_struct and not d_type.is_defined() and vartype.ref_count==0)
                     compilation_err.append('storage of struct named {} not avaiable'.format(d_type.name))
                     parser.error = compilation_err[-1]
                     parser_error()
@@ -820,8 +824,7 @@ class Declaration(_BaseDecl):
         self.is_static = storage_type == 'static'
         self.is_typedef = storage_type == 'typedef'
         self.is_void = _type == 'void'
-        self.is_struct = _type is StructType
-
+        self.is_struct = isinstance(_type, StructType)
         if self.is_typedef:
             for init_decl in self.init_list:
                 decl = init_decl.declarator
@@ -847,7 +850,7 @@ class Declaration(_BaseDecl):
                     parser_error()
                 
                 # struct declaration checking
-                if self.is_struct and _type.is_defined() and vartype.ref_count==0:
+                if self.is_struct and not _type.is_defined() and vartype.ref_count==0:
                     compilation_err.append('storage of struct named {} not avaiable'.format(_type.name))
                     parser.error = compilation_err[-1]
                     parser_error()
@@ -879,13 +882,14 @@ class Declaration(_BaseDecl):
                 parser_error()
             
             # struct declaration checking
-            if self.is_struct and _type.is_defined() and vartype.ref_count==0:
+            if self.is_struct and not _type.is_defined() and vartype.ref_count==0:
                 compilation_err.append('storage of struct named {} not avaiable'.format(_type.name))
                 parser.error = compilation_err[-1]
                 parser_error()
 
             # Add declaration in symtab
             symtable.add_var(decl.name, vartype, self.is_static)
+            # print("decl ", decl.name, vartype)
 
     @staticmethod
     def _gen_dot(obj):
