@@ -2,16 +2,18 @@ int absolute(int x){
  if(x < 0) return -x;
  return x;
 }
-int odd(int number){}
-int even(int number){}
+// int odd(int number){}
+// int even(int number){}
 
-int main() {
+int main() 
+{
   int T; 
-  T = scanf();
-  while (T) {
+  // T = scanf();
+  while (1) 
+  {
     T = T-1;
     int n; 
-    n = scanf();
+    // n = scanf();
     printf("odd: ");
     printf(odd(n));
     printf("even: ");
