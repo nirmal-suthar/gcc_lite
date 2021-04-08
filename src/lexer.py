@@ -36,7 +36,6 @@ keywords = {
     'struct' : 'STRUCT',
     'switch':'SWITCH',
     'typedef':'TYPEDEF',
-    'type_name':'TYPE_NAME',
     'union':'UNION',
     'unsigned':'UNSIGNED',
     'void':'VOID',
@@ -51,6 +50,7 @@ tokens = [
         
         # ID
         'IDENTIFIER',
+        'TYPE_NAME',
 
         # Constant 
         'I_CONSTANT',
@@ -176,18 +176,9 @@ def t_RS_PAREN(t):
 def t_IDENTIFIER(t):
     t.type = keywords.get(t.value, 'IDENTIFIER')
 
-    if t.type != 'IDENTIFIER':
-        return t
-
-    lookup_alias = symtable.lookup_alias(t.value)
-    if lookup_alias is None:
-        t.type = 'IDENTIFIER'
-    else:
+    if t.type == 'IDENTIFIER' and symtable.lookup_alias(t.value):
         t.type = 'TYPE_NAME'
     
-    # TODO: sometimes lexer has large look ahead so token right after declaration are 
-    # returned as IDENTIFIER instead of TYPENAME
-
     return t
 
 # Constants
@@ -210,7 +201,7 @@ def t_F_CONSTANT(t):
 def t_I_CONSTANT(t):
     return t
 
-t_C_CONSTANT = r'\'([^\'\\\n]|(\\.))\''
+t_C_CONSTANT        = r'\'([^\'\\\n]|(\\.))\''
 t_STRING_LITERAL    = r'\"([^"\\\n]|(\\.))*\"'
 
 # Assuming tab equal to 1 column
