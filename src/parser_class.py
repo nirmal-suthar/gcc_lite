@@ -9,12 +9,11 @@ import pydot
 from helper import *
 from parser import parser, lexer, bcolors
 
-def parser_error():
-    
+def parser_error(err_string='default'):
+    parser.compilation_err = True
     print(bcolors.BOLD+'{}:{}:'.format(lexer.filename,lexer.lineno)+bcolors.ENDC,end='')
-    print(bcolors.FAIL+' SyntaxError: '+bcolors.ENDC,parser.error)
+    print(bcolors.FAIL+' SyntaxError: '+bcolors.ENDC,err_string)
     print('     {} |{}'.format(lexer.lineno,lexer.lines[lexer.lineno - 1]))
-    raise SyntaxError
 
 
 # #############################################################################
@@ -939,11 +938,14 @@ class CompoundStmt(Statement):
     def _gen_dot(obj):
         """Get a list of node and edge declarations."""
         dot_list = ['CompoundStmt']
-        for decl in obj.decl_list:
-            dot_list.append(decl._gen_dot(decl))
-        
-        for stmt in obj.stmt_list:
-            dot_list.append(stmt._gen_dot(stmt))
+
+        if isinstance(obj.decl_list, list):
+            for decl in obj.decl_list:
+                dot_list.append(decl._gen_dot(decl))
+
+        if isinstance(obj.stmt_list, list):        
+            for stmt in obj.stmt_list:
+                dot_list.append(stmt._gen_dot(stmt))
         
         return dot_list
         
@@ -975,17 +977,12 @@ class JumpStmt(Statement):
         super().__init__("Jump Statement")
         self.jump_type = jump_type
         self.expr = expr
-
         if self.jump_type == 'break':
-            if symtable.check_break_scope():
-                compilation_err.append('break not allowed without loop or switch')
-                parser.error = compilation_err[-1]
-                parser_error()
+            if not symtable.check_break_scope():
+                parser_error('break not allowed without loop or switch')
         elif self.jump_type == 'continue':
-            if symtable.check_continue_scope():
-                compilation_err.append('continue not allowed without loop')
-                parser.error = compilation_err[-1]
-                parser_error()
+            if not symtable.check_continue_scope():
+                parser_error('continue not allowed without loop')
 
 
 # #############################################################################

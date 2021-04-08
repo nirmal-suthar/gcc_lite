@@ -658,7 +658,7 @@ def p_compound_statement_0(p):
     p[0] = CompoundStmt(p[3], None)
 
 def p_compound_statement(p):
-    ''' compound_statement : '{' empty empty '}' 
+    ''' compound_statement : '{' push_scope pop_scope '}' 
             | '{' push_scope statement_list pop_scope '}'   
             | '{' push_scope  declaration_list statement_list pop_scope '}' 
     '''
@@ -748,27 +748,27 @@ def p_translation_unit(p):
         p[0] = p[1] + [p[2]]
 
 def p_external_declaration(p):
-    ''' external_declaration : function_definition func_scope compound_statement
+    ''' external_declaration :  function_definition compound_statement
 	        | declaration
     '''
     if len(p) == 2:
         p[0] = p[1]
     else:
         p1, p2, p3, (p4, is_ellipsis) = p[1]
-        p[0] = FuncDef(p1, p2, p3, p4, p[3], is_ellipsis)
+        # p[0] = FuncDef(p1, p2, p3, p4, p[3], is_ellipsis)
+        p[0] = FuncDef(p1, p2, p3, p4, p[2], is_ellipsis)
 
 def p_function_definition(p):
-    ''' function_definition : declaration_specifiers IDENTIFIER param_list 
-        | declaration_specifiers pointer IDENTIFIER param_list
+    ''' function_definition : declaration_specifiers IDENTIFIER param_list func_scope
+        | declaration_specifiers pointer IDENTIFIER param_list func_scope
     '''
-    if len(p) == 4:
+    if len(p) == 5:
         p[0] = (p[1], 0, p[2], p[3])
         symtable.add_func(Function(VarType(0, p[1].type_spec), p[2], p[3][0], p[3][1]))
     else:
         p[0] = (p[1], p[2], p[3], p[4])
         symtable.add_func(Function(VarType(p[2], p[1].type_spec), p[3], p[4][0], p[4][1]))
-
-
+        
 # def _parse(ifile):
 #         symtable = SymbolTable()
 #         compilation_err = []
@@ -787,5 +787,6 @@ parser = yacc.yacc()
 parser.type = None
 parser.is_typedef = False
 parser.error = ''
+parser.compilation_err = False
 
 from parser_class import *
