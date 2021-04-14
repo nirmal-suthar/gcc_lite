@@ -1088,8 +1088,8 @@ class OpExpr(BaseExpr):
 
         rel = ['==','!=','<','>','<=','>=']
         if self.ops in rel:
-            self.falselist = [len(ir.code)]
-            self.truelist = [len(ir.code)]
+            self.falselist = [len(tac.code)]
+            self.truelist = [len(tac.code)]
             tac.emit("ifgoto",self.place,'eq0','')#place to be backpached
             tac.emit("goto",'','','')#place to be backpached
         else:
@@ -1488,7 +1488,7 @@ class InitDeclarator(_BaseDecl):
         # dot: print only if initiaizer is not empty
 
         # three address code
-        # ir.emit() for the declaration
+        # tac.emit() for the declaration
 
 class Specifier(_BaseDecl):
     def __init__(self, specifier_name):
@@ -2176,7 +2176,7 @@ class IRHelper:
         for x in st_list:
             self.code[x][3] = target_label
 
-ir = IRHelper()
+tac = IRHelper()
 
 compilation_err = []
 
