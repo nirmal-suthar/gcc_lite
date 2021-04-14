@@ -43,6 +43,7 @@ class SymbolTable():
         self.all_scope = [self.global_scope]
 
         self.scope_stack = [self.global_scope]
+        self.tmp_cnt = 0 #for three address code temp variables
     
     def cur_depth(self):
         return len(self.scope_stack)
@@ -143,6 +144,12 @@ class SymbolTable():
                 
         self.function[func.name] = func
 
+    #this will give a temp for three address code
+    def get_temp_for_ir(self):
+        self.tmp_cnt = self.tmp_cnt + 1
+        name = 'temp' + str(self.tmp_cnt)
+        return  name
+    
     def dump_csv(self, filename):
         with open(filename, 'w', newline='') as csv_file:
             writer = csv.writer(csv_file)
@@ -184,4 +191,30 @@ class SymbolTable():
                     # writer.writerow(['','','','','','',''])
 
 symtable = SymbolTable()
+
+class IRHelper:
+
+    def __init__(self):
+        self.labelCount = 0
+        self.code = []
+
+    def newLabel(self):
+        #get a new symtable temporary, may put in symbol table
+        label = "t" + str(self.labelCount)
+        self.labelCount += 1
+        return label
+
+    def emit(self, lhs, rhs, rhs1, operator):
+        # add (lhs = rhs operator rhs1) in the three address code list 
+        rhs = str(rhs)
+        rhs1 = str(rhs1)
+        self.code.append([lhs,rhs,rhs1,operator])
+
+    def backpatch(self,st_list,target_label):
+        #set the target label for the statements in the list
+        for x in st_list:
+            self.code[x][3] = target_label
+
+tac = IRHelper()
+
 compilation_err = []

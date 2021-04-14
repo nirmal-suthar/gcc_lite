@@ -148,6 +148,9 @@ class BaseExpr(_BASENODE) :
         # default type for error reporting
         self.expr_type = VarType(0, 'int')
 
+        # place attribute for 3ac
+        self.place = None
+
     ops_type = {
         # arithmetic operators
         '+' : ['int', 'float', 'char'],
@@ -273,6 +276,28 @@ class OpExpr(BaseExpr):
         self.ops = ops
         self.rhs = rhs
         self.get_type()
+        # self.emit()
+
+    def emit(self):
+        # used for 3ac & backpaching 
+        if self.ops != '=':
+            name = symtable.get_temp_for_ir()
+            self.place = name
+            tac.emit(name, lhs.place, rhs.place, self.ops)
+        else:
+            self.place = rhs.place
+            tac.emit(lhs.place,rhs.place,'', self.ops)
+
+        rel = ['==','!=','<','>','<=','>=']
+        if self.ops in rel:
+            self.falselist = [len(tac.code)]
+            self.truelist = [len(tac.code)]
+            tac.emit("ifgoto",self.place,'eq0','')#place to be backpached
+            tac.emit("goto",'','','')#place to be backpached
+        else:
+            self.truelist = []
+            self.falselist = []
+
 
     def get_type(self):
         
@@ -361,6 +386,17 @@ class UnaryExpr(OpExpr):
         self.ops_type['--'] = ['int', 'char', 'float']
         super().__init__(None, ops, rhs)
         self.get_type()
+
+    def emit(self):
+        #three address code
+        tmp = symtable.get_temp_for_ir()
+        if ops == "++":
+            tac.emit(tmp, rhs.place,'1','+')
+            tac.emit(rhs.place,tmp ,'','=')
+        elif ops == "--":
+            tac.emit(tmp, rhs.place,'1','-')
+            tac.emit(rhs.place,tmp ,'','=')
+
 
     def get_type(self):
 

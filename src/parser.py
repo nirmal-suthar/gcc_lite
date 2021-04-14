@@ -296,21 +296,39 @@ def p_inclusive_or_expression(p):
 
 def p_logical_and_expression(p):
     ''' logical_and_expression : inclusive_or_expression
-            | logical_and_expression AND_OP inclusive_or_expression
+            | logical_and_expression AND_OP Marker inclusive_or_expression
     '''
     if len(p)==2:
         p[0] = p[1]
     else:
-        p[0] = OpExpr(p[1], p[2], p[3])
+        # p[0] = OpExpr(p[1], p[2], p[3])
+        p[0] = OpExpr(p[1], p[2], p[4])
+        # tac.backpatch(p[1].truelist,p[3])
+        # p[0].truelist = p[4].truelist
+        # p[0].falselist =p[1].falselist+ p[4].falselist
+
+def p_Marker(p):
+    ''' Marker : 
+    '''
+    pass
 
 def p_logical_or_expression(p):
     ''' logical_or_expression : logical_and_expression
-            | logical_or_expression OR_OP logical_and_expression
+            | logical_or_expression OR_OP Marker_for_backpaching logical_and_expression
     '''
     if len(p)==2:
         p[0] = p[1]
     else:
-        p[0] = OpExpr(p[1], p[2], p[3])
+        # p[0] = OpExpr(p[1], p[2], p[3])
+        p[0] = OpExpr(p[1], p[2], p[4])
+        # tac.backpatch(p[1].falselist,p[3])
+        # p[0].truelist = p[1].truelist+p[4].truelist
+        # p[0].falselist = p[4].falselist
+
+def p_Marker_for_backpaching(p):
+    ''' Marker_for_backpaching : 
+    '''
+    pass
 
 def p_conditional_expression(p):
     ''' conditional_expression : logical_or_expression
@@ -711,16 +729,39 @@ def p_expression_statement(p):
         p[0] = ExprStmt(p[1])
 
 def p_selection_statement(p):
+    # Added markers to be used for backpaching
     ''' selection_statement : IF '(' expression ')' statement %prec IFX
             | IF '(' expression ')' statement ELSE statement
             | SWITCH '(' expression ')' switch_scope statement
     '''
+
+    # parsing is not happening correctly with this rule
+    # selection_statement : IF '(' expression ')' M1 statement M2 %prec IFX
+
+
     if len(p)==6:
         p[0] = SelectionStmt(p[1], p[3], p[5])
+        # tac.backpatch(p[3].truelist,p[5])
+        # tac.backpatch(p[3].falselist,p[7])
     elif len(p) == 7:
         p[0] = SelectionStmt(p[1], p[3], p[6])
     else:
         p[0] = SelectionStmt(p[1], p[3], p[5], p[7])
+
+# def p_if_only_statement(p):
+#     ''' if_only_statement : M1 statement M2
+#     '''
+#     p[0] = p[2]
+
+def p_M(p):
+    ''' M :
+    '''
+    pass
+
+def p_N(p):
+    ''' N :
+    '''
+    pass
 
 def p_iteration_statement(p):
     ''' iteration_statement : WHILE '(' expression ')' loop_scope statement
@@ -779,7 +820,6 @@ def p_function_definition(p):
     else:
         p[0] = (p[1], p[2], p[3], p[4])
         symtable.add_func(Function(VarType(p[2], p[1].type_spec), p[3], p[4][0], p[4][1]))
-
 
 from lexer import lexer, tokens
 
