@@ -288,21 +288,30 @@ def p_inclusive_or_expression(p):
 
 def p_logical_and_expression(p):
     ''' logical_and_expression : inclusive_or_expression
-            | logical_and_expression AND_OP inclusive_or_expression
+            | logical_and_expression AND_OP Marker inclusive_or_expression
     '''
     if len(p)==2:
         p[0] = p[1]
     else:
-        p[0] = OpExpr(p[1], p[2], p[3])
+        # p[0] = OpExpr(p[1], p[2], p[3])
+        p[0] = OpExpr(p[1], p[2], p[4])
+        ir.backpatch(p[1].truelist,p[3])
+        p[0].truelist = p[4].truelist
+        p[0].falselist =p[1].falselist+ p[4].falselist
+
 
 def p_logical_or_expression(p):
     ''' logical_or_expression : logical_and_expression
-            | logical_or_expression OR_OP logical_and_expression
+            | logical_or_expression OR_OP Marker_for_backpaching logical_and_expression
     '''
     if len(p)==2:
         p[0] = p[1]
     else:
-        p[0] = OpExpr(p[1], p[2], p[3])
+        # p[0] = OpExpr(p[1], p[2], p[3])
+        p[0] = OpExpr(p[1], p[2], p[4])
+        ir.backpatch(p[1].falselist,p[3])
+        p[0].truelist = p[1].truelist+p[4].truelist
+        p[0].falselist = p[4].falselist
 
 def p_conditional_expression(p):
     ''' conditional_expression : logical_or_expression
@@ -703,12 +712,15 @@ def p_expression_statement(p):
         p[0] = ExprStmt(p[1])
 
 def p_selection_statement(p):
-    ''' selection_statement : IF '(' expression ')' statement %prec IFX
+    # Added markers to be used for backpaching
+    ''' selection_statement : IF '(' expression ')' M1 statement M2 %prec IFX
             | IF '(' expression ')' statement ELSE statement
             | SWITCH '(' expression ')' switch_scope statement
     '''
-    if len(p)==6:
+    if len(p)==8:
         p[0] = SelectionStmt(p[1], p[3], p[5])
+        ir.backpatch(p[3].truelist,p[5])
+        ir.backpatch(p[3].falselist,p[7])
     elif len(p) == 7:
         p[0] = SelectionStmt(p[1], p[3], p[6])
     else:
@@ -1065,6 +1077,25 @@ class OpExpr(BaseExpr):
         self.rhs = rhs
         self.get_type()
 
+        # used for 3ac & backpaching 
+        if operator != '=':
+            name = symtable.get_temp_for_ir()
+            self.place = name
+            tac.emit(name, lhs.place, rhs.place, operator)
+        else:
+            self.place = rhs.place
+            tac.emit(lhs.place,rhs.place,'',operator)
+
+        rel = ['==','!=','<','>','<=','>=']
+        if self.ops in rel:
+            self.falselist = [len(ir.code)]
+            self.truelist = [len(ir.code)]
+            tac.emit("ifgoto",self.place,'eq0','')#place to be backpached
+            tac.emit("goto",'','','')#place to be backpached
+        else:
+            self.truelist = []
+            self.falselist = []
+
     def get_type(self):
         
         ref_count = 0
@@ -1144,7 +1175,7 @@ class OpExpr(BaseExpr):
                         parser.error = compilation_err[-1]
                         parser_error()
 
-        self.expr_type = VarType(ref_count, inferred_type)
+        self.expr_type = VarType(ref_count, inferred_type)        
 
 class UnaryExpr(OpExpr):
     def __init__(self, ops, rhs):
@@ -1152,6 +1183,15 @@ class UnaryExpr(OpExpr):
         self.ops_type['--'] = ['int', 'char', 'float']
         super().__init__(None, ops, rhs)
         self.get_type()
+
+        #three address code
+        tmp = symtable.get_temp_for_ir()
+        if ops == "++":
+            tac.emit(tmp, rhs.place,'1','+')
+            tac.emit(rhs.place,tmp ,'','=')
+        elif ops == "--":
+            tac.emit(tmp, rhs.place,'1','-')
+            tac.emit(rhs.place,tmp ,'','=')
 
     def get_type(self):
 
@@ -1446,6 +1486,9 @@ class InitDeclarator(_BaseDecl):
                     else:
                         self.initializer = CastExpr(self.expr_type, self.initializer)
         # dot: print only if initiaizer is not empty
+
+        # three address code
+        # ir.emit() for the declaration
 
 class Specifier(_BaseDecl):
     def __init__(self, specifier_name):
@@ -1953,6 +1996,7 @@ class SymbolTable():
         self.all_scope = [self.global_scope]
 
         self.scope_stack = [self.global_scope]
+        self.tmp_cnt = 0 #for three address code temp variables
     
     def cur_depth(self):
         return len(self.scope_stack)
@@ -2061,6 +2105,12 @@ class SymbolTable():
                 
         self.function[func.name] = func
 
+    #this will give a temp for three address code
+    def get_temp_for_ir(self):
+        self.tmp_cnt = self.tmp_cnt + 1
+        name = 'temp' + str(self.tmp_cnt)
+        return  name
+
     def dump_csv(self, filename):
         with open(filename, 'w', newline='') as csv_file:
             writer = csv.writer(csv_file)
@@ -2102,6 +2152,32 @@ class SymbolTable():
                     # writer.writerow(['','','','','','',''])
 
 symtable = SymbolTable()
+
+class IRHelper:
+
+    def __init__(self):
+        self.labelCount = 0
+        self.code = []
+
+    def newLabel(self):
+        #get a new symtable temporary, may put in symbol table
+        label = "t" + str(self.labelCount)
+        self.labelCount += 1
+        return label
+
+    def emit(self, lhs, rhs, rhs1, operator):
+        # add (lhs = rhs operator rhs1) in the three address code list 
+        rhs = str(rhs)
+        rhs1 = str(rhs1)
+        self.code.append([lhs,rhs,rhs1,operator])
+
+    def backpatch(self,st_list,target_label):
+        #set the target label for the statements in the list
+        for x in st_list:
+            self.code[x][3] = target_label
+
+ir = IRHelper()
+
 compilation_err = []
 
 from lexer import lexer, tokens
