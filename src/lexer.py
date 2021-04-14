@@ -260,4 +260,5 @@ if __name__ == "__main__":
     
     print(tabulate(tokenList, headers=["Token", "Lexeme", "Line#", "Column#"]))
 
-from parser import symtable
+# from parser import symtable
+from helper import symtable
