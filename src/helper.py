@@ -7,6 +7,7 @@ from parser import parser_error
 #     print(bcolors.FAIL+' SyntaxError: '+bcolors.ENDC,parser.error)
 #     print('     {} |{}'.format(lexer.lineno,lexer.lines[lexer.lineno - 1]))
 
+
 class ScopeTable:
     def __init__(self, scope_depth=0, parent=None, scope_id=0, scope_type='Other'):
         self.scope_id = scope_id        # scope id
@@ -195,20 +196,23 @@ symtable = SymbolTable()
 class IRHelper:
 
     def __init__(self):
-        self.labelCount = 0
+        self.tmpCount = 0
+        self.lebelCount = 0
         self.code = []
 
-    def newLabel(self):
+    def newtmp(self):
         #get a new symtable temporary, may put in symbol table
-        label = "t" + str(self.labelCount)
+        tmp = "t" + str(self.tmpCount)
+        self.tmpCount += 1
+        return tmp
+    
+    def newlabel(self):
+        label = "L" + str(self.labelCount)
         self.labelCount += 1
         return label
 
-    def emit(self, lhs, rhs, rhs1, operator):
-        # add (lhs = rhs operator rhs1) in the three address code list 
-        rhs = str(rhs)
-        rhs1 = str(rhs1)
-        self.code.append([lhs,rhs,rhs1,operator])
+    def emit(self, code):
+        self.code.append(code)
 
     def backpatch(self,st_list,target_label):
         #set the target label for the statements in the list

@@ -296,39 +296,21 @@ def p_inclusive_or_expression(p):
 
 def p_logical_and_expression(p):
     ''' logical_and_expression : inclusive_or_expression
-            | logical_and_expression AND_OP Marker inclusive_or_expression
+            | logical_and_expression AND_OP nextquad inclusive_or_expression
     '''
     if len(p)==2:
         p[0] = p[1]
     else:
-        # p[0] = OpExpr(p[1], p[2], p[3])
         p[0] = OpExpr(p[1], p[2], p[4])
-        # tac.backpatch(p[1].truelist,p[3])
-        # p[0].truelist = p[4].truelist
-        # p[0].falselist =p[1].falselist+ p[4].falselist
-
-def p_Marker(p):
-    ''' Marker : 
-    '''
-    pass
 
 def p_logical_or_expression(p):
     ''' logical_or_expression : logical_and_expression
-            | logical_or_expression OR_OP Marker_for_backpaching logical_and_expression
+            | logical_or_expression OR_OP nextquad logical_and_expression
     '''
     if len(p)==2:
         p[0] = p[1]
     else:
-        # p[0] = OpExpr(p[1], p[2], p[3])
         p[0] = OpExpr(p[1], p[2], p[4])
-        # tac.backpatch(p[1].falselist,p[3])
-        # p[0].truelist = p[1].truelist+p[4].truelist
-        # p[0].falselist = p[4].falselist
-
-def p_Marker_for_backpaching(p):
-    ''' Marker_for_backpaching : 
-    '''
-    pass
 
 def p_conditional_expression(p):
     ''' conditional_expression : logical_or_expression
@@ -748,30 +730,18 @@ def p_selection_statement(p):
     else:
         p[0] = SelectionStmt(p[1], p[3], p[5], p[7])
 
-# def p_if_only_statement(p):
-#     ''' if_only_statement : M1 statement M2
-#     '''
-#     p[0] = p[2]
 
-def p_M(p):
-    ''' M :
+def p_iteration_statement_while(p):
+    ''' iteration_statement : WHILE '(' nextquad expression ')' nextquad loop_scope statement
     '''
-    pass
-
-def p_N(p):
-    ''' N :
-    '''
-    pass
-
-def p_iteration_statement(p):
-    ''' iteration_statement : WHILE '(' expression ')' loop_scope statement
-            | FOR '(' expression_statement expression_statement ')' loop_scope statement
+    p[0] = IterStmt(p[1], p[4], p[8]) 
+    
+def p_iteration_statement_for(p):
+    ''' iteration_statement : FOR '(' expression_statement expression_statement ')' loop_scope statement
             | FOR '(' expression_statement expression_statement expression ')' loop_scope statement
     '''
-    if len(p)==7:
-        p[0] = IterStmt(p[1], p[3], p[6]) 
-    elif len(p)==8:
-        p[0] = IterStmt(p[1], (p[3](),p[4](),None), p[7]) 
+    if len(p)==8:
+        p[0] = IterStmt(p[1], (p[3](),p[4](),None), p[7])
     else:
         p[0] = IterStmt(p[1], (p[3](),p[4](),p[5]), p[8]) 
 
