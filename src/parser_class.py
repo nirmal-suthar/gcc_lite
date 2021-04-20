@@ -298,6 +298,9 @@ class Const(BaseExpr):
 
     def gen(self):
         self.place = self.const
+        if getattr(self, 'bool', False):
+            tac.emit(f"ifnz {self.place} goto {self.true}")
+            tac.emit(f"goto {self.false}")
 
     def get_type(self):
         if self.dvalue == 'int':
@@ -326,6 +329,9 @@ class Identifier(BaseExpr):
     
     def gen(self):
         self.place = self.name # resolved using symtable during code generation
+        if getattr(self, 'bool', False):
+            tac.emit(f"ifnz {self.place} goto {self.true}")
+            tac.emit(f"goto {self.false}")
 
     def get_type(self):
         _var = symtable.lookup_var(self.name)
