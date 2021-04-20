@@ -296,7 +296,7 @@ def p_inclusive_or_expression(p):
 
 def p_logical_and_expression(p):
     ''' logical_and_expression : inclusive_or_expression
-            | logical_and_expression AND_OP nextquad inclusive_or_expression
+            | logical_and_expression AND_OP inclusive_or_expression
     '''
     if len(p)==2:
         p[0] = p[1]
@@ -305,7 +305,7 @@ def p_logical_and_expression(p):
 
 def p_logical_or_expression(p):
     ''' logical_or_expression : logical_and_expression
-            | logical_or_expression OR_OP nextquad logical_and_expression
+            | logical_or_expression OR_OP logical_and_expression
     '''
     if len(p)==2:
         p[0] = p[1]
@@ -732,7 +732,7 @@ def p_selection_statement(p):
 
 
 def p_iteration_statement_while(p):
-    ''' iteration_statement : WHILE '(' nextquad expression ')' nextquad loop_scope statement
+    ''' iteration_statement : WHILE '(' expression ')' loop_scope statement
     '''
     p[0] = IterStmt(p[1], p[4], p[8]) 
     

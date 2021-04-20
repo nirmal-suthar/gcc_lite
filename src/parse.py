@@ -4,7 +4,7 @@ import sys, argparse, pydot
 from argparse import ArgumentParser
 # from parser import parser, lexer, symtable
 from parser import parser, lexer
-from helper import symtable
+from helper import symtable, tac
 
 
 def arg_parser():
@@ -56,6 +56,10 @@ if __name__ == "__main__":
         
     graph = pydot.Dot('gcc_lite: Abstract Syntax Tree', graph_type='digraph')
     symtable.dump_csv(args.out.split('.')[-2] + '.csv')
+
+    syntax_tree.gen()
+    tac.dump_code(args.out.split('.')[-2] + '.out')
+
     AST = syntax_tree.gen_dot(graph)
 
     graph.write_raw(args.out)

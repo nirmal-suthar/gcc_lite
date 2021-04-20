@@ -45,6 +45,7 @@ class SymbolTable():
 
         self.scope_stack = [self.global_scope]
         self.tmp_cnt = 0 #for three address code temp variables
+        self.cur_idx = 0 # for changing scope while 3ac generation
     
     def cur_depth(self):
         return len(self.scope_stack)
@@ -69,7 +70,11 @@ class SymbolTable():
             scope = scope.parent
         return False
 
-    def push_scope(self, scope_type='Other') -> None:
+    def push_scope(self, scope_type='Other', exists=False) -> None:
+        if exists:
+            self.scope_stack.append(self.all_scope[self.cur_idx + 1])
+            self.cur_idx += 1
+            return
         new_scope = ScopeTable(self.cur_depth(), self.scope_stack[-1], len(self.all_scope), scope_type)
         self.all_scope.append(new_scope)
         self.scope_stack.append(new_scope)
@@ -197,7 +202,7 @@ class IRHelper:
 
     def __init__(self):
         self.tmpCount = 0
-        self.lebelCount = 0
+        self.labelCount = 0
         self.code = []
 
     def newtmp(self):
@@ -218,6 +223,15 @@ class IRHelper:
         #set the target label for the statements in the list
         for x in st_list:
             self.code[x][3] = target_label
+    
+    def dump_code(self, filename):
+        with open(filename, 'w') as f:
+            for instr in self.code:
+                if instr[-1] == ':':
+                    f.write(instr + "\n")
+                else:
+                    f.write("\t" + instr + "\n")
+        # print(self.code)
 
 tac = IRHelper()
 

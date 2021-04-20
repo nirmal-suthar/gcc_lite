@@ -3,6 +3,7 @@ from typing import Union, List
 import pydot
 from parser import parser, parser_error
 from helper import *
+import copy
 
 ADDR_SIZE = 4
 INT_SIZE = 4
@@ -82,6 +83,10 @@ class StructType(_BASENODE):
         self.variables = variables
 
     def get_size(self):
+        size = 0
+        for var in self.variables:
+            size += self.variables[var].get_size()
+        return size
 
     def __str__(self):
         return 'struct {} {{ {} }}'.format(self.name, self.variables)
@@ -130,11 +135,58 @@ class VarType(_BASENODE):
             else:
                 raise Exception("Invalid type")
 
+    def get_ref_size(self):
+        return VarType(self.ref_count - 1, self._type).get_size()
+
     def is_pointer(self):
         return self.ref_count > 0
 
     def basic_type(self):
         return self._type
+    
+    def is_struct_type(self):
+        return (not self.is_pointer()) and isinstance(self, StructType)
+
+    def castable_to(self, other):
+        if self.is_pointer():
+            return other.is_pointer() or other.basic_type() in ['int', 'char']
+        elif self.basic_type() in ['int', 'char']:
+            return other.is_pointer() or other.basic_type() in ['int', 'char', 'float']
+        elif self.basic_type() in ['float']:
+            return (not other.is_pointer()) and other.basic_type() in ['int', 'char', 'float']
+        else:
+            return self == other
+
+    def get_caste_type(self, other):
+        
+        if self == other:
+            return copy.deepcopy(self)
+        
+        if self.is_pointer():
+            if self == other:
+                return copy.deepcopy(self)
+            else:
+                return None
+    
+        elif self.basic_type() in ['int', 'char']:
+            if other.is_pointer():
+                return None
+            elif other.basic_type() in ['int', 'float']:
+                return copy.deepcopy(other)
+            elif other.basic_type() == 'char':
+                return copy.deepcopy(self)
+            else:
+                return None
+        
+        elif self.basic_type() == 'float':
+            if other.is_pointer():
+                return None
+            elif other.basic_type() in ['int', 'char', 'float']:
+                return copy.deepcopy(self)
+            else:
+                return None
+        else:
+            return None
 
     def __str__(self):
         if isinstance(self._type, str):
@@ -312,51 +364,83 @@ class OpExpr(BaseExpr):
     def gen(self):
         self.place = tac.newtmp()
         symtable.add_var(self.place, self.expr_type)
+
+        if self.ops in ['||', '&&'] and not getattr(self, 'bool', False):
+            self.true = tac.newlabel()
+            self.false = tac.newlabel()
+
         if self.ops == '||':
-            self.lhs.bool = self.bool
-            self.lhs.shortcircuit = True
+            self.lhs.bool = True
             self.lhs.true = self.true
             self.lhs.false = tac.newlabel()
 
-            self.rhs.bool = self.bool
-            self.rhs.shortcircuit = True
+            self.rhs.bool = True
             self.rhs.true = self.true
             self.rhs.false = self.false
 
             self.lhs.gen()
-            tac.emit('{}:'.format(self.lhs.false))
+            tac.emit(f'{self.lhs.false} :')
             self.rhs.gen()
+
         elif self.ops == '&&':
-            # TODO : Handle short circuit operators correctly
-            pass
+            
+            self.lhs.bool = True
+            self.lhs.true = tac.newlabel()
+            self.lhs.false = self.false
 
-                
+            self.rhs.bool = True
+            self.rhs.true = self.true
+            self.rhs.false = self.false
 
-
-        self.lhs.gen()
-        self.rhs.gen()
-        tac.emit("{} = {} {} {}".format(self.place, self.lhs.place, self.ops, self.rhs.place))
-
-    def emit(self):
-        # used for 3ac & backpaching 
-        if self.ops != '=':
-            name = symtable.get_temp_for_ir()
-            self.place = name
-            tac.emit(name, lhs.place, rhs.place, self.ops)
+            self.lhs.gen()
+            tac.emit(f'{self.lhs.true} :')
+            self.rhs.gen()
+        
         else:
-            self.place = rhs.place
-            tac.emit(lhs.place,rhs.place,'', self.ops)
+            if isinstance(self.lhs, Const) or isinstance(self.lhs, Identifier):
+                self.lhs.gen()
+            else:
+                self.lhs.next = tac.newlabel()
+                self.lhs.gen()
+                tac.emit(f'{self.lhs.next} :')
+            self.rhs.next = self.next
+            self.rhs.gen()
 
-        rel = ['==','!=','<','>','<=','>=']
-        if self.ops in rel:
-            self.falselist = [len(tac.code)]
-            self.truelist = [len(tac.code)]
-            tac.emit("ifgoto",self.place,'eq0','')#place to be backpached
-            tac.emit("goto",'','','')#place to be backpached
-        else:
-            self.truelist = []
-            self.falselist = []
+            if self.expr_type.basic_type() == 'float' and not self.expr_type.is_pointer():
+                operator = 'float' + self.ops
+            elif self.ops in ['<<', '>>', '|', '&', '%']:
+                operator = self.ops
+            else:
+                operator = 'int' + self.ops
 
+            if self.lhs.expr_type.is_pointer() and not self.rhs.expr_type.is_pointer():
+                tmpvar = tac.newtmp()
+                symtable.add_var(tmpvar, self.rhs.expr_type)
+                tac.emit(f"{tmpvar} = {self.rhs.place} int* {self.lhs.expr_type.get_ref_size()}")
+                tac.emit(f"{self.place} = {self.lhs.place} {operator} {tmpvar}")
+            elif not self.lhs.expr_type.is_pointer() and self.rhs.expr_type.is_pointer():
+                tmpvar = tac.newtmp()
+                symtable.add_var(tmpvar, self.lhs.expr_type)
+                tac.emit(f"{tmpvar} = {self.lhs.place} int* {self.rhs.expr_type.get_ref_size()}")
+                tac.emit(f"{self.place} = {tmpvar} {operator} {self.rhs.place}")
+            elif self.lhs.expr_type.is_pointer():
+                tmpvar = tac.newtmp()
+                symtable.add_var(tmpvar, VarType(0, 'int'))
+                tac.emit(f"{tmpvar} = {self.lhs.place} {operator} {self.rhs.place}")
+                tac.emit(f"{self.place} = {tmpvar} int/ {self.rhs.expr_type.get_ref_size()}")
+            else:
+                tac.emit("{} = {} {} {}".format(self.place, self.lhs.place, operator, self.rhs.place))
+
+            if getattr(self, 'bool', False):
+                tac.emit(f"ifnz {self.place} goto {self.true}")
+                tac.emit(f"goto {self.false}")
+        
+        if not getattr(self, 'bool', False) and self.ops in ['||', '&&']:
+            tac.emit(f'{self.true} :')
+            tac.emit(f'{self.place} = 1')
+            tac.emit(f'goto {self.next}')
+            tac.emit(f'{self.false} :')
+            tac.emit(f'{self.place} = 0')
 
     def get_type(self):
         
@@ -370,6 +454,21 @@ class OpExpr(BaseExpr):
             compilation_err.append('Type not compatible with ops {}'.format(self.ops))
             parser.error = compilation_err[-1]
             parser_error()
+
+        if self.ops in ['>', '>=', '<', '<=']:
+            if self.lhs.expr_type.get_caste_type(self.rhs.expr_type):
+                self.expr_type = VarType(0, 'int')
+                return
+            else:
+                parser_error(f'Type not compatible with ops {self.ops}')
+                return
+        elif self.ops in ['||', '&&']:
+            if self.lhs.expr_type.is_struct_type() or self.rhs.expr_type.is_struct_type():
+                parser_error(f'Type not compatible with ops {self.ops}')
+                return
+            else:
+                self.expr_type = VarType(0, 'int')
+                return
 
         # if lhs is pointer
         if self.lhs.expr_type.ref_count > 0:
@@ -453,32 +552,54 @@ class UnaryExpr(OpExpr):
         if self.ops == 'sizeof':
             tac.emit(f"{self.place} = {self.rhs.get_size()}")
         elif self.ops == '++':
-            self.rhs.gen()
+            if isinstance(self.rhs, Const) or isinstance(self.rhs, Identifier):
+                self.rhs.gen()
+            else:
+                self.rhs.next = tac.newlabel()
+                self.rhs.gen()
+                tac.emit(f'{self.rhs.next} :')
             tac.emit(f"{self.place} = {self.rhs.place}")
             tac.emit(f"{self.rhs.place} = {self.rhs.place} + 1")
         elif self.ops == '--':
-            self.rhs.gen()
+            if isinstance(self.rhs, Const) or isinstance(self.rhs, Identifier):
+                self.rhs.gen()
+            else:
+                self.rhs.next = tac.newlabel()
+                self.rhs.gen()
+                tac.emit(f'{self.rhs.next} :')
             tac.emit(f"{self.place} = {self.rhs.place}")
             tac.emit(f"{self.rhs.place} = {self.rhs.place} - 1")
         elif self.ops in ['&', '*', '-', '~']:
-            self.rhs.gen()
+            if isinstance(self.rhs, Const) or isinstance(self.rhs, Identifier):
+                self.rhs.gen()
+            else:
+                self.rhs.next = tac.newlabel()
+                self.rhs.gen()
+                tac.emit(f'{self.rhs.next} :')
             tac.emit("{} = {}{}".format(self.place, self.ops, self.rhs.place))
         elif self.ops == '+':
-            self.rhs.gen()
+            if isinstance(self.rhs, Const) or isinstance(self.rhs, Identifier):
+                self.rhs.gen()
+            else:
+                self.rhs.next = tac.newlabel()
+                self.rhs.gen()
+                tac.emit(f'{self.rhs.next} :')
             tac.emit(f"{self.place} = {self.rhs.place}")
         elif self.ops == '!':
-            # handle boolean
-            pass
-
-    def emit(self):
-        #three address code
-        tmp = symtable.get_temp_for_ir()
-        if ops == "++":
-            tac.emit(tmp, rhs.place,'1','+')
-            tac.emit(rhs.place,tmp ,'','=')
-        elif ops == "--":
-            tac.emit(tmp, rhs.place,'1','-')
-            tac.emit(rhs.place,tmp ,'','=')
+            self.rhs.next = self.next
+            if not getattr(self, 'bool', False):
+                self.true = tac.newlabel()
+                self.false = tac.newlabel()
+            self.rhs.true = self.false
+            self.rhs.false = self.true
+            self.rhs.bool = True
+            self.rhs.gen()
+            if not getattr(self, 'bool', False):
+                tac.emit(f'{self.true} :')
+                tac.emit(f'{self.place} = 1')
+                tac.emit(f'goto {self.next}')
+                tac.emit(f'{self.false} :')
+                tac.emit(f'{self.place} = 0')
 
 
     def get_type(self):
@@ -548,15 +669,30 @@ class PostfixExpr(OpExpr):
         symtable.add_var(self.place, self.expr_type)
 
         if self.ops == '++':
-            self.lhs.gen()
+            if isinstance(self.lhs, Const) or isinstance(self.lhs, Identifier):
+                self.lhs.gen()
+            else:
+                self.lhs.next = tac.newlabel()
+                self.lhs.gen()
+                tac.emit(f'{self.lhs.next} :')
             tac.emit(f"{self.lhs.place} = {self.lhs.place} + 1")
             tac.emit(f"{self.place} = {self.lhs.place}")
         elif self.ops == '--':
-            self.lhs.gen()
+            if isinstance(self.lhs, Const) or isinstance(self.lhs, Identifier):
+                self.lhs.gen()
+            else:
+                self.lhs.next = tac.newlabel()
+                self.lhs.gen()
+                tac.emit(f'{self.lhs.next} :')
             tac.emit(f"{self.lhs.place} = {self.lhs.place} - 1")
             tac.emit(f"{self.place} = {self.lhs.place}")
         elif self.ops == '[':
-            self.lhs.gen()
+            if isinstance(self.lhs, Const) or isinstance(self.lhs, Identifier):
+                self.lhs.gen()
+            else:
+                self.lhs.next = tac.newlabel()
+                self.lhs.gen()
+                tac.emit(f'{self.lhs.next} :')
             tac.emit(f"{self.lhs.place} [ {self.rhs.place} ]")
         elif self.ops == '(':
             if self.rhs == None:
@@ -693,7 +829,13 @@ class CastExpr(BaseExpr):
         self.get_type()
     
     def gen(self):
-        self.expr.gen()
+        
+        if isinstance(self.expr, Const) or isinstance(self.expr, Identifier):
+            self.expr.gen()
+        else:
+            self.expr.next = tac.newlabel()
+            self.expr.gen()
+            tac.emit(f'{self.expr.next} :')
         self.place = tac.newtmp()
         symtable.add_var(self.place, self.expr_type)
 
@@ -746,17 +888,52 @@ class AssignExpr(OpExpr):
         symtable.add_var(self.place, self.expr_type)
 
         if isinstance(self.lhs, UnaryExpr) and self.lhs.ops == '*':
-            self.lhs.rhs.gen()
-            self.rhs.gen()
+            if isinstance(self.lhs.rhs, Const) or isinstance(self.lhs.rhs, Identifier):
+                self.lhs.rhs.gen()
+            else:
+                self.lhs.rhs.next = tac.newlabel()
+                self.lhs.rhs.gen()
+                tac.emit(f'{self.lhs.rhs.next} :')
+            
+            if isinstance(self.rhs, Const) or isinstance(self.rhs, Identifier):
+                self.rhs.gen()
+            else:
+                self.rhs.next = tac.newlabel()
+                self.rhs.gen()
+                tac.emit(f'{self.rhs.next} :')
+            
             tac.emit(f"*{self.lhs.rhs.place} = {self.rhs.place}")
         elif isinstance(self.lhs, PostfixExpr) and self.lhs.ops == '[':
-            self.lhs.lhs.gen()
-            self.rhs.gen()
+            
+            if isinstance(self.lhs.lhs, Const) or isinstance(self.lhs.lhs, Identifier):
+                self.lhs.lhs.gen()
+            else:
+                self.lhs.lhs.next = tac.newlabel()
+                self.lhs.lhs.gen()
+                tac.emit(f'{self.lhs.lhs.next} :')
+            
+            if isinstance(self.rhs, Const) or isinstance(self.rhs, Identifier):
+                self.rhs.gen()
+            else:
+                self.rhs.next = tac.newlabel()
+                self.rhs.gen()
+                tac.emit(f'{self.rhs.next} :')
+            
             tac.emit(f"{self.lhs.lhs.place} [ {self.lhs.rhs.place} ] = {self.rhs.place}")
         else:
-            self.lhs.gen()
-            self.rhs.gen()
-            
+            if isinstance(self.lhs, Const) or isinstance(self.lhs, Identifier):
+                self.lhs.gen()
+            else:
+                self.lhs.next = tac.newlabel()
+                self.lhs.gen()
+                tac.emit(f'{self.lhs.next} :')
+
+            if isinstance(self.rhs, Const) or isinstance(self.rhs, Identifier):
+                self.rhs.gen()
+            else:
+                self.rhs.next = tac.newlabel()
+                self.rhs.gen()
+                tac.emit(f'{self.rhs.next} :')
         
             tac.emit(f"{self.lhs.place} = {self.rhs.place}")
         
@@ -765,7 +942,7 @@ class AssignExpr(OpExpr):
     def get_type(self):
         
         # compatability is checked in CastExpr
-        self.rhs = CastExpr(self.rhs.expr_type, self.rhs)
+        self.rhs = CastExpr(self.lhs.expr_type, self.rhs)
         self.expr_type = self.lhs.expr_type
 
 class CondExpr(BaseExpr):
@@ -776,8 +953,11 @@ class CondExpr(BaseExpr):
         self.else_expr = else_expr
     
     def gen(self):
+
         self.cond.true = tac.newlabel()
         self.cond.false = tac.newlabel()
+        self.cond.bool = True
+
         self.cond.gen()
         
         tac.emit(f"{self.cond.true} :")
@@ -785,20 +965,32 @@ class CondExpr(BaseExpr):
         self.place = tac.newtmp()
         symtable.add_var(self.place, self.expr_type)
         
-        self.if_expr.gen()
+        if isinstance(self.if_expr, Const) or isinstance(self.if_expr, Identifier):
+            self.if_expr.gen()
+        else:
+            self.if_expr.next = tac.newlabel()
+            self.if_expr.gen()
+            tac.emit(f'{self.if_expr.next} :')
+
         tac.emit(f"{self.place} = {self.if_expr.place}")
 
-        self.next = tac.newlabel() # multiple labels may created, somehow pass this attribute from parent
         tac.emit(f"goto {self.next}")
         tac.emit(f"{self.cond.false} :")
         
-        self.else_expr.gen()
+        if isinstance(self.else_expr, Const) or isinstance(self.else_expr, Identifier):
+            self.else_expr.gen()
+        else:
+            self.else_expr.next = tac.newlabel()
+            self.else_expr.gen()
+            tac.emit(f'{self.else_expr.next} :')
+        
         tac.emit(f"{self.place} = {self.else_expr.place}")
-        tac.emit(f"{self.next} :")
 
     def get_type(self, ):
         # check type mismatch between if_expr and else_expr
-        self.expr_type = self.if_expr.expr_type
+        self.expr_type = self.if_expr.expr_type.get_caste_type(self.else_expr)
+        if self.expr_type is None:
+            parser_error("Types not compatible with ternary operator")
 
 class CommaExpr(BaseExpr):
     def __init__(self, *expr):
@@ -811,7 +1003,12 @@ class CommaExpr(BaseExpr):
 
     def gen(self):
         for expr in self.expr_list:
-            expr.gen()
+            if isinstance(expr, Const) or isinstance(expr, Identifier):
+                expr.gen()
+            else:
+                expr.next = tac.newlabel()
+                expr.gen()
+                tac.emit(f'{expr.next} :')
         
         self.place = tac.newtmp()
         symtable.add_var(self.place, self.expr_type)
@@ -877,12 +1074,12 @@ class InitDeclarator(_BaseDecl):
                         pass
                     else:
                         self.initializer = CastExpr(self.expr_type, self.initializer)
-        # dot: print only if initiaizer is not empty
+        # dot: print only if initializer is not empty
 
     def gen(self):
-        if initiaizer is not None:
+        if self.initializer is not None:
             self.initializer.gen()
-            tac.emit(f"{self.declarator.name} = {self.initiaizer.place}")
+            tac.emit(f"{self.declarator.name} = {self.initializer.place}")
         else:
             pass
 
@@ -1004,7 +1201,7 @@ class StructDeclaration(_BaseDecl):
         self.init_list = init_list
     
     def gen(self):
-        # TODO: allow initialization with expr
+        # TODO: allow initialization with expr (`int x: 2` in struct declaration)
         pass
 
 class StructDeclarator(_BaseDecl):
@@ -1016,6 +1213,7 @@ class StructDeclarator(_BaseDecl):
         # self.constexpr = expr
     
     def gen(self):
+        # TODO: allow initialization with expr (`int x: 2` in struct declaration)
         pass
 
 class Declarator(_BaseDecl):
@@ -1135,9 +1333,19 @@ class Declaration(_BaseDecl):
             # print("decl ", decl.name, vartype)
 
     def gen(self):
-        for init in self.init_list:
+        for idx, init in enumerate(self.init_list):
             init.gen()
+            # if isinstance(init, Const) or isinstance(init, Identifier):
+            #     init.gen()
+            # elif idx == len(self.init_list):
+            #     init.next = self.next
+            #     init.gen()
+            # else:
+            #     init.next = tac.newlabel()
+            #     init.gen()
+            #     tac.emit(f'{init.next} :')
     
+
     @staticmethod
     def _gen_dot(obj):
         """Get a list of node and edge declarations."""
@@ -1172,6 +1380,8 @@ class LabeledStmt(Statement):
         self.stmt = stmt
     
     def gen(self):
+        self.stmt.next = self.next
+        self.stmt.breaklabel = self.breaklabel
         self.stmt.gen()
 
 class CompoundStmt(Statement):
@@ -1185,11 +1395,23 @@ class CompoundStmt(Statement):
         self.stmt_list = stmts
 
     def gen(self):
-        for decl in self.decl_list:
-            decl.gen()
+        symtable.push_scope(exists=True)
+        if self.decl_list:
+            for decl in self.decl_list:
+                decl.gen()
         
-        for stmt in self.stmt_list:
-            stmt.gen()
+        if self.stmt_list:
+            for idx, stmt in enumerate(self.stmt_list):
+                stmt.breaklabel = getattr(self, 'breaklabel', None)
+                stmt.continuelabel = getattr(self, 'continuelabel', None)
+
+                if idx < len(self.stmt_list)-1:
+                    stmt.next = tac.newlabel()
+                    stmt.gen()
+                    tac.emit(f'{stmt.next} :')
+                else:
+                    stmt.next = self.next
+                    stmt.gen()
     
     @staticmethod
     def _gen_dot(obj):
@@ -1217,6 +1439,7 @@ class ExprStmt(Statement):
     
     def gen(self):
         if self.expr:
+            self.expr.next = self.next
             self.expr.gen()
 
 class SelectionStmt(Statement):
@@ -1226,6 +1449,67 @@ class SelectionStmt(Statement):
         self.select_expr = select_expr
         self.if_stmt = if_stmt
         self.else_stmt = else_stmt
+    
+    def gen(self):
+        if self.select_type == 'if':
+            if self.else_stmt:
+                self.select_expr.bool = True
+                self.select_expr.true = tac.newlabel()
+                self.select_expr.false = tac.newlabel()
+
+                self.if_stmt.next = self.next
+                self.else_stmt.next = self.next
+
+                self.select_expr.gen()
+                tac.emit(f'{self.select_expr.true} :')
+                self.if_stmt.gen()
+                tac.emit(f'goto {self.next}')
+                tac.emit(f'{self.select_expr.false} :')
+                self.else_stmt.gen()
+            else:
+                self.select_expr.bool = True
+                self.select_expr.true = tac.newlabel()
+                self.select_expr.false = self.next
+
+                self.if_stmt.next = self.next
+
+                self.select_expr.gen()
+                tac.emit(f'{self.select_expr.true} :')
+                self.if_stmt.gen()
+        else:
+            if isinstance(init, Const) or isinstance(init, Identifier):
+                self.select_expr.gen()
+            else:
+                self.select_expr.next = tac.newlabel()
+                self.select_expr.gen()
+                tac.emit(f'{self.select_expr.next} :')
+            case_list = []
+            case_stmts = self.if_stmt.stmt_list
+            test_label = tac.newlabel()
+            tac.emit(f'goto {test_label}')
+            case_labels = []
+            case_labels.append(tac.newlabel())
+            tac.emit(f'{case_labels[-1]} :')
+            for idx, case_stmt in enumerate(case_stmts):
+                case_stmt.breaklabel = self.next
+                if idx < len(case_stmt) - 1:
+                    case_stmt.next = tac.newlabel()
+                    case_stmt.gen()
+                    tac.emit(f'{case_stmt.next} :')
+                    case_labels.append(case_stmt.next)
+                else:
+                    case_stmt.gen()
+                    tac.emit(f'goto {self.next}')
+                    tac.emit(f'{test_label} :')    
+                case_list.append(case_stmt.case)
+            
+            for idx, case in enumerate(case_list):
+                if isinstance(case, tuple):
+                    case[1].gen()
+                    tac.emit(f'ifeq {self.select_expr.place} {case[1].place} goto {case_labels[idx]}')
+                else:
+                    tac.emit(f'goto {case_labels[idx]}')
+
 
 class IterStmt(Statement):
     def __init__(self, iter_type, iter_expr, stmt):
@@ -1233,6 +1517,55 @@ class IterStmt(Statement):
         self.iter_type = iter_type
         self.iter_expr = iter_expr
         self.stmt = stmt
+    
+    def gen(self):
+        if self.iter_type == 'while':
+            begin = tac.newlabel()
+            
+            self.iter_expr.bool = True
+            self.iter_expr.true = tac.newlabel()
+            self.iter_expr.false = self.next
+            
+            self.stmt.next = begin
+            self.stmt.continuelabel = begin
+            self.stmt.breaklabel = self.next
+
+            tac.emit(f'{begin} :')
+            self.iter_expr.gen()
+            tac.emit(f'{self.iter_expr.true} :')
+            self.stmt.gen()
+            tac.emit(f'goto {begin}')
+        else:
+            e1, e2, e3 = iter_expr
+            
+            e1.next = tac.newlabel()
+            e1.gen()
+            tac.emit(f'{e1.next} :')
+
+            if e3 is None:
+                self.iter_type = 'while'
+                self.iter_expr = e2
+                self.gen()
+            else:
+                begin = tac.newlabel()
+            
+                e2.bool = True
+                e2.true = tac.newlabel()
+                e2.false = self.next
+                
+                self.stmt.next = tac.newlabel()
+                self.stmt.continuelabel = begin
+                self.stmt.breaklabel = self.next
+
+                tac.emit(f'{begin} :')
+                e2.gen()
+                tac.emit(f'{e2.true} :')
+                self.stmt.gen()
+                tac.emit(f'{self.stmt.next} :')
+
+                e3.next = begin
+                e3.gen()
+                tac.emit(f'goto {begin}')
 
 class JumpStmt(Statement):
     def __init__(self, jump_type, expr=None):
@@ -1247,6 +1580,16 @@ class JumpStmt(Statement):
             if not symtable.check_continue_scope():
                 parser.error = 'continue not allowed without loop'
                 parser_error()
+    
+    def gen(self):
+        if self.jump_type == 'continue':
+            tac.emit(f'goto {self.continuelabel}')
+        elif self.jump_type == 'break':
+            tac.emit(f'goto {self.breaklabel}')
+        elif self.jump_type == 'return':
+            if self.expr:
+                self.expr.next = self.next
+            tac.emit(f'return')
 
 
 # #############################################################################
@@ -1267,6 +1610,7 @@ class Start(Node):
     
     def gen(self, ):
         for unit in self.units:
+            unit.next = None
             unit.gen()
 
     @staticmethod
@@ -1371,6 +1715,10 @@ class FuncDef(Node):
         self.vartype = VarType(self.ref_count, self.specifier.type_spec)
         self.is_ellipsis = is_ellipsis
         # symtable.add_func(Function(self.vartype, self.name, self.param_list))
+
+    def gen(self):
+        self.stmt.next = self.next
+        self.stmt.gen()
 
     @staticmethod
     def _gen_dot(obj):
