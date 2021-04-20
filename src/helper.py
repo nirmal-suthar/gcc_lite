@@ -222,15 +222,18 @@ class IRHelper:
     def backpatch(self,st_list,target_label):
         #set the target label for the statements in the list
         for x in st_list:
-            self.code[x][3] = target_label
+            self.code[x] += str(target_label)
     
+    def nextquad(self):
+        return len(self.code)
+
     def dump_code(self, filename):
         with open(filename, 'w') as f:
-            for instr in self.code:
+            for idx, instr in enumerate(self.code):
                 if instr[-1] == ':':
                     f.write(instr + "\n")
                 else:
-                    f.write("\t" + instr + "\n")
+                    f.write(str(idx) + "\t" + instr + "\n")
         # print(self.code)
 
 tac = IRHelper()
