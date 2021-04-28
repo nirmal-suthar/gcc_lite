@@ -17,6 +17,11 @@ FLOAT_SIZE = 4
 class _BASENODE:
     def __init__(self):
         self.attr_ignore = ['attr_ignore']
+        self.nextlist = []
+        self.breaklist = []
+        self.continuelist = []
+        self.truelist = []
+        self.falselist = []
 
     @staticmethod
     def _gen_dot(obj):
@@ -95,23 +100,25 @@ class StructType(_BASENODE):
         if self.variables is not None:
             return True
         
-        self.variables = symtable.lookup_struct(self.name)
+        sym_type = symtable.lookup_struct(self.name)
+        if sym_type is not None:
+            self.variables = sym_type.variables
+
         return self.variables is not None
 
     def _get_size(self):
         raise Exception('TODO')
 
 class Function(_BASENODE):
-    def __init__(self, ret_type, name, args, is_ellipsis=False, is_declared=False):
+    def __init__(self, ret_type, name, args, is_declared=False):
         super().__init__()
         self.ret_type = ret_type        # should be VarType
         self.name = name                # str
         self.args = args                # list
-        self.is_ellipsis = is_ellipsis  # is_ellipsis function
+        self.is_declared = is_declared  # declaration or definition 
     
     def __str__(self):
-        return 'Function(ret_type={}, name={}, args={}, is_ellipsis={})'.format(str(self.ret_type), self.name, self.args, self.is_ellipsis)
-
+        return 'Function(ret_type={}, name={}, args={}, is_declared={})'.format(str(self.ret_type), self.name, self.args, self.is_declared)
 
 class VarType(_BASENODE):
     def __init__(self, ref_count, _type, arr_offset=None):
@@ -393,7 +400,7 @@ class OpExpr(BaseExpr):
             self.rhs.bool = True
 
             self.lhs.gen()
-            backpatch(getattr(self.lhs, 'truelist', []), tac.nextquad())
+            tac.backpatch(getattr(self.lhs, 'truelist', []), tac.nextquad())
             self.rhs.gen()
             self.truelist = self.lhs.truelist
             self.falselist = self.lhs.falselist + self.rhs.falselist
@@ -1062,12 +1069,13 @@ class StructUnionSpecifier(Specifier):
             struct_type = StructType(self.name, self.variables)
             symtable.add_struct(self.name, struct_type)
 
-        # lambda structs => name in StructType None
+        # lambda structs => give name as None in StructType
         elif self.decls_list is not None and self.name is None:
             struct_type = StructType(None, self.variables)
 
         # ony name given => try lookup struct in symtable, if not
-        # found then give only name in hope it gets resolved later.
+        # found then give only name in hope it gets resolved later 
+        # (case of LinkedList struct!)
         elif self.decls_list is None and self.name is not None:
             lookup_type = symtable.lookup_struct(self.name)
             if lookup_type is None:
@@ -1083,41 +1091,31 @@ class StructUnionSpecifier(Specifier):
         for declaration in self.decls_list:
       
             d_spec = declaration.specifier
-            d_init_list = declaration.init_list
+            d_decl_list = declaration.init_list
             d_type = d_spec.type_spec 
             
             is_void = d_type == 'void'
             is_struct = d_type is StructType  
             
-            for init_decl in d_init_list:
-                decl = init_decl.declarator
+            for decl in d_decl_list:
 
                 vartype = VarType(decl.ref_count, d_type, decl.arr_offset)
 
                 # Sanity checking of arr offset
                 if not all(map(lambda x: isinstance(x, Const) and x.dvalue=='int', decl.arr_offset)):
-                    compilation_err.append('Only Int constant in array declaration')
-                    parser.error = compilation_err[-1]
-                    parser_error()
+                    parser_error('Size of array ‘{}’ has non-integer type'.format(decl.name))
 
                 # void declaration checking
                 if is_void and vartype.ref_count==0:
-                    compilation_err.append('cannot assign variable of type void')
-                    parser.error = compilation_err[-1]
-                    parser_error()
+                    parser_error('Variable `{}` declared void inside struct'.format(decl.name))
                 
                 # struct declaration checking
                 if is_struct and not d_type.is_defined() and vartype.ref_count==0:
-                    # print(1, is_struct and not d_type.is_defined() and vartype.ref_count==0)
-                    compilation_err.append('storage of struct named {} not avaiable'.format(d_type.name))
-                    parser.error = compilation_err[-1]
-                    parser_error()
+                    parser_error('Storage of struct named `{}` not avaiable'.format(d_type.name))
 
                 # Add declaration in variables
                 if decl.name in self.variables:
-                    compilation_err.append('Redeclaration of variable named {} inside struct'.format(decl.name))
-                    parser.error = compilation_err[-1]
-                    parser_error()
+                    parser_error('Redeclaration of variable named `{}` inside struct'.format(decl.name))
 
                 self.variables[decl.name] = vartype
 
@@ -1133,6 +1131,9 @@ class DeclarationSpecifier(Specifier):
         super().__init__("Declaration Specifier")
         self.storage_type_spec = storage_type_spec
         self.type_spec = type_spec
+        self.is_typedef = (storage_type_spec == 'typedef')
+        self.is_static = (storage_type_spec == 'static')
+        self.type = type_spec
 
         if isinstance(self.type_spec, StructUnionSpecifier):
             self.type_spec = self.type_spec.struct_type
@@ -1149,18 +1150,6 @@ class StructDeclaration(_BaseDecl):
         super().__init__('TODO')
         self.specifier = specifier
         self.init_list = init_list
-    
-    def gen(self):
-        # TODO: allow initialization with expr (`int x: 2` in struct declaration)
-        pass
-
-class StructDeclarator(_BaseDecl):
-    def __init__(self, declarator, expr=None):
-        super().__init__('TODO')
-        self.declarator = declarator
-        # FIXME: const expr set to None for simpler behaviour
-        self.constexpr = None
-        # self.constexpr = expr
     
     def gen(self):
         # TODO: allow initialization with expr (`int x: 2` in struct declaration)
@@ -1209,78 +1198,72 @@ class Declaration(_BaseDecl):
         self.specifier = specifier
         self.init_list = init_list
 
-        _type = self.specifier.type_spec
-        storage_type = self.specifier.storage_type_spec
+        self._type = self.specifier.type_spec
 
-        self.is_static = storage_type == 'static'
-        self.is_typedef = storage_type == 'typedef'
-        self.is_void = _type == 'void'
-        self.is_struct = isinstance(_type, StructType)
+        self.is_static = self.specifier.is_static
+        self.is_typedef = self.specifier.is_typedef
+        self.is_void = self._type == 'void'
+        self.is_struct = isinstance(self._type, StructType)
+
+        # storing aliases
         if self.is_typedef:
             for init_decl in self.init_list:
                 decl = init_decl.declarator
 
                 # Function declaration !
                 if isinstance(decl, FuncDirectDecl):    
-                    vartype = VarType(decl.ref_count, _type)
-                    # add alias as a function type
-                    symtable.add_typedef(decl.name, Function(vartype, decl.name, decl.param_list, decl.is_ellipsis))
+                    parser_error('Function typedefs not supported')
                     continue
 
-                vartype = VarType(decl.ref_count, _type, decl.arr_offset)
+                vartype = VarType(decl.ref_count, self._type, decl.arr_offset)
 
                 # Sanity checking of arr offset
                 if not all(map(lambda x: isinstance(x, Const) and x.dvalue=='int', decl.arr_offset)):
-                    compilation_err.append('Only Int constant in array declaration')
-                    parser.error = compilation_err[-1]
-                    parser_error()
+                    parser_error('Size of array `{}` has non-integer type'.format(decl.name))
 
-                if self.is_void and vartype.ref_count==0:
-                    compilation_err.append('cannot assign variable of type void')
-                    parser.error = compilation_err[-1]
-                    parser_error()
+                # TODO: this is valid `typedef void mytype;`
+                # if self.is_void and vartype.ref_count==0:
+                #     compilation_err.append('Variable `{}` declared void'.format(decl.name))
+                #     parser.error = compilation_err[-1]
+                #     parser_error()
                 
-                # struct declaration checking
-                if self.is_struct and not _type.is_defined() and vartype.ref_count==0:
-                    compilation_err.append('storage of struct named {} not avaiable'.format(_type.name))
-                    parser.error = compilation_err[-1]
-                    parser_error()
+                # # struct declaration checking
+                # if self.is_struct and not self._type.is_defined() and vartype.ref_count==0:
+                #     compilation_err.append('storage of struct named {} not avaiable'.format(self._type.name))
+                #     parser.error = compilation_err[-1]
+                #     parser_error()
 
                 # Add declaration in symtab
                 symtable.add_typedef(decl.name, vartype)
 
-        for init_decl in self.init_list:
+        else:
 
-            decl = init_decl.declarator
+            for init_decl in self.init_list:
 
-            # Function declaration !
-            if isinstance(decl, FuncDirectDecl):    
-                vartype = VarType(decl.ref_count, _type)
-                symtable.add_func(Function(vartype, decl.name, decl.param_list))
-                continue
+                decl = init_decl.declarator
 
-            vartype = VarType(decl.ref_count, _type, decl.arr_offset)
-            # print("declaring", decl.name, vartype)
-            # Sanity checking of arr offset
-            if not all(map(lambda x: isinstance(x, Const) and x.dvalue=='int', decl.arr_offset)):
-                compilation_err.append('Only Int constant in array declaration')
-                parser.error = compilation_err[-1]
-                parser_error()
+                # Function declaration !
+                if isinstance(decl, FuncDirectDecl):    
+                    vartype = VarType(decl.ref_count, self._type)
+                    symtable.add_func(Function(vartype, decl.name, decl.param_list))
+                    continue
 
-            if self.is_void and vartype.ref_count==0:
-                compilation_err.append('cannot assign variable of type void')
-                parser.error = compilation_err[-1]
-                parser_error()
-            
-            # struct declaration checking
-            if self.is_struct and not _type.is_defined() and vartype.ref_count==0:
-                compilation_err.append('storage of struct named {} not avaiable'.format(_type.name))
-                parser.error = compilation_err[-1]
-                parser_error()
+                vartype = VarType(decl.ref_count, self._type, decl.arr_offset)
 
-            # Add declaration in symtab
-            symtable.add_var(decl.name, vartype, self.is_static)
-            # print("decl ", decl.name, vartype)
+                # Sanity checking of arr offset
+                if not all(map(lambda x: isinstance(x, Const) and x.dvalue=='int', decl.arr_offset)):
+                    parser_error('Size of array `{}` has non-integer type'.format(decl.name))
+
+                # Sanity checking of void declartion
+                if self.is_void and vartype.ref_count==0:
+                    parser_error('Variable `{}` declared void'.format(decl.name))
+                
+                # struct declaration checking
+                if self.is_struct and not self._type.is_defined() and vartype.ref_count==0:
+                    parser_error('storage of struct named `{}` not avaiable'.format(self._type.name))
+
+                # Add declaration in symtab
+                symtable.add_var(decl.name, vartype, self.is_static)
 
     def gen(self):
         for idx, init in enumerate(self.init_list):
@@ -1321,7 +1304,10 @@ class LabeledStmt(Statement):
         super().__init__("Labeled Statement")
         self.case = case
         self.stmt = stmt
-    
+
+        if not symtable.check_case_scope():
+            parser_error('`{}` label not within a switch statement'.format(self.case[0]))
+
     def gen(self):
         self.stmt.gen()
         self.breaklist = getattr(self.stmt, 'breaklist', [])
@@ -1353,10 +1339,13 @@ class CompoundStmt(Statement):
                 # print(getattr(stmt, 'nextlist', []), tac.nextquad())
                 tac.backpatch(getattr(stmt, 'nextlist', []), tac.nextquad())
 
-                self.breaklist += getattr(self, 'breaklabel', [])
-                self.continuelist += getattr(self, 'continuelabel', [])
+                self.breaklist += getattr(stmt, 'breaklist', [])
+                self.continuelist += getattr(stmt, 'continuelist', [])
 
-            self.nextlist = getattr(self.stmt_list[-1], 'nextlist', [])
+            if self.stmt_list == []:
+                self.nextlist = []
+            else:
+                self.nextlist = getattr(self.stmt_list[-1], 'nextlist', [])
     
     @staticmethod
     def _gen_dot(obj):
@@ -1396,7 +1385,9 @@ class SelectionStmt(Statement):
         self.else_stmt = else_stmt
     
     def gen(self):
+
         if self.select_type == 'if':
+            # if else statment
             if self.else_stmt:
                 self.select_expr.bool = True
 
@@ -1412,6 +1403,7 @@ class SelectionStmt(Statement):
                 self.else_stmt.gen()
 
                 self.nextlist += getattr(self.if_stmt, 'nextlist', []) + getattr(self.else_stmt, 'nextlist', [])
+            # if statement
             else:
                 self.select_expr.bool = True
 
@@ -1421,6 +1413,7 @@ class SelectionStmt(Statement):
                 self.if_stmt.gen()
 
                 self.nextlist = [tac.nextquad()] + getattr(self.if_stmt, 'nextlist', [])
+        # switch
         else:
             self.select_expr.gen()
             tac.backpatch(getattr(self.select_expr, 'nextlist', []), tac.nextquad())
@@ -1436,7 +1429,7 @@ class SelectionStmt(Statement):
             self.breaklist = []
 
             for idx, case_stmt in enumerate(case_stmts):
-                case_stmt.breaklabel = self.next
+                case_stmt.breaklabel = self.nextlist
                 if idx < len(case_stmt) - 1:
                     case_stmt.gen()
                     tac.backpatch(getattr(case_stmt, 'nextlist', []), tac.nextquad())
@@ -1471,9 +1464,12 @@ class IterStmt(Statement):
         self.stmt = stmt
     
     def gen(self):
+
+        # `while` loop
         if self.iter_type == 'while':
-            begin = tac.nextquad()
             
+            begin = tac.nextquad()
+
             self.iter_expr.bool = True
             
             self.iter_expr.gen()
@@ -1485,12 +1481,14 @@ class IterStmt(Statement):
 
             self.nextlist = getattr(self.iter_expr, 'falselist', []) + getattr(self.stmt, 'breaklist', [])
 
+        # `for` loop
         else:
-            e1, e2, e3 = iter_expr
+            e1, e2, e3 = self.iter_expr
             
             e1.gen()
             tac.backpatch(getattr(e1, 'nextlist', []), tac.nextquad())
 
+            # if `e3` is None then it is equiv to `while` loop
             if e3 is None:
                 self.iter_type = 'while'
                 self.iter_expr = e2
@@ -1503,6 +1501,7 @@ class IterStmt(Statement):
                 e2.gen()
                 tac.backpatch(getattr(e2, 'truelist', []), tac.nextquad())
                 self.stmt.gen()
+                
                 tac.backpatch(getattr(self.stmt, 'nextlist', []), tac.nextquad())
 
                 e3.gen()
@@ -1521,12 +1520,10 @@ class JumpStmt(Statement):
         self.expr = expr
         if self.jump_type == 'break':
             if not symtable.check_break_scope():
-                parser.error = 'break not allowed without loop or switch'
-                parser_error()
+                parser_error('`break` statement not within loop or switch')
         elif self.jump_type == 'continue':
             if not symtable.check_continue_scope():
-                parser.error = 'continue not allowed without loop'
-                parser_error()
+                parser_error('`continue` statement not within a loop')
     
     def gen(self):
         if self.jump_type == 'continue':
@@ -1654,7 +1651,6 @@ class FuncDef(Node):
         name: str, 
         param_list: List[tuple], 
         stmt: CompoundStmt,
-        is_ellipsis: bool = False
     ):
         super().__init__('Function Definition')
         self.specifier = specifier
@@ -1663,8 +1659,7 @@ class FuncDef(Node):
         self.param_list = param_list
         self.stmt = stmt
         self.vartype = VarType(self.ref_count, self.specifier.type_spec)
-        self.is_ellipsis = is_ellipsis
-        # symtable.add_func(Function(self.vartype, self.name, self.param_list))
+        symtable.add_func(Function(self.vartype, self.name, self.param_list, is_declared=True))
 
     def gen(self):
         self.stmt.gen()
@@ -1682,7 +1677,7 @@ class FuncDef(Node):
         dot_list.append(repr(obj.name))
 
         # param list
-        dot_list.append(_BASENODE._gen_dot(obj.param_list) + (['...'] if obj.is_ellipsis else []))                
+        dot_list.append(_BASENODE._gen_dot(obj.param_list))                
 
         # compound stmt
         dot_list.append(obj.stmt._gen_dot(obj.stmt))                

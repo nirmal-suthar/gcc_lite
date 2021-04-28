@@ -69,6 +69,13 @@ class SymbolTable():
                 return True
             scope = scope.parent
         return False
+    
+    def check_case_scope(self):
+        # if immediate scope is Switch case then good,
+        # else throw error
+        if self.cur_scope().metadata in ['Switch']:
+            return True
+        return False
 
     def push_scope(self, scope_type='Other', exists=False) -> None:
         if exists:
@@ -118,14 +125,14 @@ class SymbolTable():
     def add_var(self, name, vtype, is_static = False):
         scope = self.global_scope if is_static else self.cur_scope()
         if scope.lookup_var(name):
-            parser_error('Redeclaration of variable named {}'.format(name))
+            parser_error('Redeclaration of variable named `{}`'.format(name))
             return
 
         scope.variables[name] = vtype
 
     def add_struct(self, name, struct_type):
         if self.cur_scope().lookup_struct(name):
-            parser_error('Redeclaration of struct named {}'.format(name))
+            parser_error('Redeclaration of struct named `{}`'.format(name))
             return
 
         self.cur_scope().structs[name] = struct_type
@@ -143,8 +150,14 @@ class SymbolTable():
     def add_func(self, func) -> None:
         if func.name in self.function:
             func_ = self.function[func.name]
-            if func_.ret_type == func.ret_type and func_.args == func.args and func_.is_ellipsis == func.is_ellipsis:
+
+            if func_.is_declared == func.is_declared == 1:
+                parser_error('Redefinition of function named `{}`'.format(func.name))
                 return
+
+            if func_.ret_type == func.ret_type and func_.args == func.args:
+                return
+
             parser_error('Redeclaration of function named {}'.format(func.name))
             return
                 

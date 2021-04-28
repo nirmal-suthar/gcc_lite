@@ -1,10 +1,5 @@
 #! /usr/bin/env python3
 
-try:
-    from CS335.gcc_lite.src.parser_class import *
-except:
-    pass
-
 from ply import yacc
 
 def parser_error(error_str=None):
@@ -12,7 +7,7 @@ def parser_error(error_str=None):
     print(bcolors.BOLD+'{}:{}:'.format(lexer.filename,lexer.lineno)+bcolors.ENDC,end='')
     if error_str == None:
         error_str = parser.error
-    print(bcolors.FAIL+' SyntaxError: '+bcolors.ENDC, error_str)
+    print(bcolors.FAIL+' Error:'+bcolors.ENDC, error_str)
     print('     {} |{}'.format(lexer.lineno,lexer.lines[lexer.lineno - 1]))
 
 
@@ -56,7 +51,8 @@ def p_push_scope(p):
         symtable.push_scope(p[-2].name)
     elif isinstance(p[-2], tuple):
         symtable.push_scope('Function')
-        for name, _type in p[-2][3][0]:
+        _, _, _, args = p[-2]
+        for name, _type in args:
             symtable.add_var(name, _type)
     else:
         symtable.push_scope()
@@ -348,7 +344,6 @@ def p_assignment_operator(p):
 
 def p_expression(p):
     ''' expression : assignment_expression
-            | expression ',' assignment_expression
     '''
     if len(p)==2:
         p[0] = p[1]
@@ -392,10 +387,12 @@ def p_declaration_specifiers(p):
         p[0] = DeclarationSpecifier(None, p[1])
         p.type = p[1]
         p.is_typedef = False
+        p.is_static = False
     else:
         p[0] = DeclarationSpecifier(p[1], p[2])
         p.type = p[2]
         p.is_typedef = (p[1] == 'typedef')
+        p.is_static = (p[1] == 'static')
 
 def p_init_declarator_list(p):
     ''' init_declarator_list : init_declarator
@@ -494,11 +491,7 @@ def p_struct_declarator_list(p):
 def p_struct_declarator(p):
     ''' struct_declarator : declarator
     '''
-
-    if len(p) == 2:
-        p[0] = StructDeclarator(p[1])
-    else:
-        p[0] = StructDeclarator(p[1], p[3])
+    p[0] = p[1]
 
 def p_declarator(p):
     ''' declarator : pointer direct_declarator
@@ -532,7 +525,7 @@ def p_param_list(p):
             | '(' ')'
     '''
     if len(p) == 3:
-        p[0] = ([],False)
+        p[0] = []
     else:
         p[0] = p[2]  
 
@@ -541,11 +534,9 @@ def p_function_declarator(p):
             | pointer IDENTIFIER '(' parameter_type_list ')'
     '''
     if len(p)==5:
-        (param_list, is_ellipsis) = p[3]
-        p[0] = FuncDirectDecl(0, p[1], param_list, is_ellipsis)
+        p[0] = FuncDirectDecl(0, p[1], p[3])
     else:
-        (param_list, is_ellipsis) = p[4]
-        p[0] = FuncDirectDecl(p[1], p[2], param_list, is_ellipsis)
+        p[0] = FuncDirectDecl(p[1], p[2], p[4])
         
 
 def p_pointer(p):
@@ -559,12 +550,8 @@ def p_pointer(p):
 
 def p_parameter_type_list(p):
     ''' parameter_type_list : parameter_list
-            | parameter_list ',' ELLIPSIS
     '''
-    if len(p) == 2:
-        p[0] = (p[1], False)
-    else:
-        p[0] = (p[1], True)
+    p[0] = p[1]
 
 def p_parameter_list(p):
     ''' parameter_list : parameter_declaration
@@ -734,7 +721,7 @@ def p_selection_statement(p):
 def p_iteration_statement_while(p):
     ''' iteration_statement : WHILE '(' expression ')' loop_scope statement
     '''
-    p[0] = IterStmt(p[1], p[4], p[8]) 
+    p[0] = IterStmt(p[1], p[3], p[6]) 
     
 def p_iteration_statement_for(p):
     ''' iteration_statement : FOR '(' expression_statement expression_statement ')' loop_scope statement
@@ -776,9 +763,8 @@ def p_external_declaration(p):
     if len(p) == 2:
         p[0] = p[1]
     else:
-        p1, p2, p3, (p4, is_ellipsis) = p[1]
-        # p[0] = FuncDef(p1, p2, p3, p4, p[3], is_ellipsis)
-        p[0] = FuncDef(p1, p2, p3, p4, p[2], is_ellipsis)
+        spec, ref, name, args = p[1]
+        p[0] = FuncDef(spec, ref, name, args, p[2])
 
 def p_function_definition(p):
     ''' function_definition : declaration_specifiers IDENTIFIER param_list func_scope
@@ -786,10 +772,8 @@ def p_function_definition(p):
     '''
     if len(p) == 5:
         p[0] = (p[1], 0, p[2], p[3])
-        symtable.add_func(Function(VarType(0, p[1].type_spec), p[2], p[3][0], p[3][1]))
     else:
         p[0] = (p[1], p[2], p[3], p[4])
-        symtable.add_func(Function(VarType(p[2], p[1].type_spec), p[3], p[4][0], p[4][1]))
 
 from lexer import lexer, tokens
 

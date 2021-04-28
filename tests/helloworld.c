@@ -1,12 +1,19 @@
-int f(int a, int b)
-{
-    return f(a, b);
-}
+// struct nirmal{
+//     int a;
+//     int b;
+//     struct hardik * c;
+
+// };
+
+
+// int fun(int a){
+//     return 0;
+// }
 
 int main()
 {
-    int *x;
-    typedef int xyz;
-    xyz d = 1;
-    return 0 ;
+    int a,b;
+    // switch(a){
+        case 1: a++;
+    return 0;
 }
