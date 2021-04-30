@@ -5,6 +5,7 @@ from argparse import ArgumentParser
 # from parser import parser, lexer, symtable
 from parser import parser, lexer
 from helper import symtable, tac
+from codegen import AssemblyGen
 
 
 def arg_parser():
@@ -59,6 +60,10 @@ if __name__ == "__main__":
     symtable.dump_csv(args.out.split('.')[-2] + '.csv')
 
     tac.dump_code(args.out.split('.')[-2] + '.out')
+
+    asm = AssemblyGen(tac.code)
+    asm.gen_assembly()
+    asm.dump_code(args.out.split('.')[-2] + '.s')
 
     AST = syntax_tree.gen_dot(graph)
 

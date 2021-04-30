@@ -53,7 +53,7 @@ def p_push_scope(p):
         symtable.push_scope('Function')
         _, _, _, args = p[-2]
         for name, _type in args:
-            symtable.add_var(name, _type)
+            symtable.add_var(name, _type, is_param=True)
     else:
         symtable.push_scope()
 
@@ -385,14 +385,14 @@ def p_declaration_specifiers(p):
     '''
     if len(p) == 2:
         p[0] = DeclarationSpecifier(None, p[1])
-        p.type = p[1]
-        p.is_typedef = False
-        p.is_static = False
+        parser.type = p[1]
+        parser.is_typedef = False
+        parser.is_static = False
     else:
         p[0] = DeclarationSpecifier(p[1], p[2])
-        p.type = p[2]
-        p.is_typedef = (p[1] == 'typedef')
-        p.is_static = (p[1] == 'static')
+        parser.type = p[2]
+        parser.is_typedef = (p[1] == 'typedef')
+        parser.is_static = (p[1] == 'static')
 
 def p_init_declarator_list(p):
     ''' init_declarator_list : init_declarator
@@ -646,7 +646,7 @@ def p_labeled_statement(p):
     if len(p)==4:
         p[0] = LabeledStmt(p[1], p[3])
     else:
-        p[0] = LabeledStmt((p[1],p[2]), p[3])
+        p[0] = LabeledStmt((p[1],p[2]), p[4])
 
 def p_compound_statement_0(p):
     ''' compound_statement : '{' push_scope declaration_list pop_scope '}'

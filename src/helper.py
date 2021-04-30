@@ -1,12 +1,13 @@
 import csv
 from parser import parser_error
+import re
 
 # def parser_error(error_str=None):
 #     parser.compilation_err = True
 #     print(bcolors.BOLD+'{}:{}:'.format(lexer.filename,lexer.lineno)+bcolors.ENDC,end='')
 #     print(bcolors.FAIL+' SyntaxError: '+bcolors.ENDC,parser.error)
 #     print('     {} |{}'.format(lexer.lineno,lexer.lines[lexer.lineno - 1]))
-
+ADDR_SIZE = 4
 
 class ScopeTable:
     def __init__(self, scope_depth=0, parent=None, scope_id=0, scope_type='Other'):
@@ -17,6 +18,8 @@ class ScopeTable:
         self.aliases = {}               # for typedefs
         self.structs = {}               # for structs and union
         self.metadata = scope_type      # will include function, loop or ifelse
+        self.size = 0
+        self.param_size = 0
 
 
     def lookup_var(self, name):
@@ -34,6 +37,34 @@ class ScopeTable:
     def lookup_alias(self, name):
         return self.aliases.get(name, None)
         # return self.parent.lookup_alias(name) if self.parent is not None else False
+    
+    def add_var(self, name, vtype, is_param=False):
+        offset = 0
+        if self.metadata == 'Global':
+            # global variables will be stored in .data section
+            offset = 0
+
+        elif self.metadata == 'Function':
+            if is_param:
+                offset = self.param_size + 2*ADDR_SIZE + vtype.get_size() # 2 ADDR_SIZE for return addr and rbp
+                self.param_size += vtype.get_size()
+            else:
+                offset = -(vtype.get_size() + self.size)
+
+        else:
+            offset = -(self.parent.size + vtype.get_size())
+            self.parent.size += vtype.get_size()
+            self.size = self.parent.size
+
+        self.variables[name] = {'name': name, 'type': vtype, 'offset': offset, 'scope_id': self.scope_id}
+    
+    def lookup_info(self, name):
+        scope = self
+        while scope:
+            if scope.lookup_var(name):
+                return scope.variables[name]
+            scope = scope.parent
+        return None
         
 class SymbolTable():
     def __init__(self):
@@ -93,7 +124,7 @@ class SymbolTable():
         scope = self.cur_scope()
         while scope:
             if scope.lookup_var(name):
-                return scope.variables[name]
+                return scope.variables[name]['type']
             scope = scope.parent
         return None
 
@@ -122,13 +153,14 @@ class SymbolTable():
     def get_size(self, dtype):
         raise Exception('TODO')
 
-    def add_var(self, name, vtype, is_static = False):
+    def add_var(self, name, vtype, is_static = False, is_param=False):
         scope = self.global_scope if is_static else self.cur_scope()
         if scope.lookup_var(name):
             parser_error('Redeclaration of variable named `{}`'.format(name))
             return
 
-        scope.variables[name] = vtype
+        scope.add_var(name, vtype, is_param=is_param)
+        # scope.variables[name] = {'type': vtype, 'offset': offset}
 
     def add_struct(self, name, struct_type):
         if self.cur_scope().lookup_struct(name):
@@ -160,7 +192,7 @@ class SymbolTable():
 
             parser_error('Redeclaration of function named {}'.format(func.name))
             return
-                
+        func.scope_id = len(self.all_scope)-1
         self.function[func.name] = func
 
     #this will give a temp for three address code
@@ -211,6 +243,81 @@ class SymbolTable():
 
 symtable = SymbolTable()
 
+class Instr:
+    def __init__(self, code):
+        self.code = code
+        self.parse_instr(self.code)
+
+    def parse_instr(self, code):
+        self.scope = symtable.cur_scope()
+        if m := re.fullmatch('ifnz (?P<e1>[^ ]*) goto (?P<label>[^ ]*)', code):
+            self.instr = 'ifnz'
+            self.e1 = m.group('e1')
+            self.label = m.group('label')
+
+        elif m := re.fullmatch('goto (?P<label>[^ ]*)', code):
+            self.instr = 'goto'
+            self.label = m.group('label')
+
+        elif m := re.fullmatch('(?P<e3>[^ ]*) = (?P<e1>[^ ]*) (?P<op>[^ ]*) (?P<e2>[^ ]*)', code):
+            self.instr = 'binop'
+            self.e1 = m.group('e1')
+            self.e2 = m.group('e2')
+            self.e3 = m.group('e3')
+            self.op = m.group('op')
+
+        elif m := re.fullmatch('(?P<e2>[^ ]*) = (?P<e1>[^ ]*)', code):
+            self.instr = 'mov'
+            self.e1 = m.group('e1')
+            self.e2 = m.group('e2')
+
+        elif m := re.fullmatch('(?P<e2>[^ ]*) = (?P<op>[^ ]*) (?P<e1>[^ ]*)', code):
+            self.instr = 'unaryop'
+            self.e1 = m.group('e1')
+            self.e2 = m.group('e2')
+            self.op = m.group('op')
+
+        elif m := re.fullmatch('(?P<e3>[^ ]*) = (?P<e1>[^ ]*) \[ (?P<e2>[^ ]*) \]', code):
+            self.instr = 'array access'
+            self.e1 = m.group('e1')
+            self.e2 = m.group('e2')
+            self.e3 = m.group('e3')
+
+        elif m := re.fullmatch('call (?P<e1>[^ ]*)', code):
+            self.instr = 'call'
+            self.e1 = m.group('e1')
+
+        elif m := re.fullmatch('param (?P<e1>[^ ]*)', code):
+            self.instr = 'push param'
+            self.e1 = m.group('e1')
+
+        elif m := re.fullmatch('\*(?P<e2>[^ ]*) = (?P<e1>[^ ]*)', code):
+            self.instr = 'memory update'
+            self.e1 = m.group('e1')
+            self.e2 = m.group('e2')
+
+        elif m := re.fullmatch('(?P<e3>[^ ]*) \[ (?P<e2>[^ ]*) \] = (?P<e1>[^ ]*)', code):
+            self.instr = 'array update'
+            self.e1 = m.group('e1')
+            self.e2 = m.group('e2')
+            self.e3 = m.group('e3')
+
+        elif m := re.fullmatch('ifeq (?P<e1>[^ ]*) (?P<e2>[^ ]*) goto (?P<label>[^ ]*)', code):
+            self.instr = 'ifeq'
+            self.e1 = m.group('e1')
+            self.e2 = m.group('e2')
+            self.label = m.group('label')
+
+        elif m := re.fullmatch('return', code):
+            self.instr = 'return'
+        
+        elif m := re.fullmatch('func (?P<e1>[^ ]*)', code):
+            self.instr = 'func'
+            self.e1 = m.group('e1')
+    
+    def __str__(self):
+        return self.code
+
 class IRHelper:
 
     def __init__(self):
@@ -220,7 +327,7 @@ class IRHelper:
 
     def newtmp(self):
         #get a new symtable temporary, may put in symbol table
-        tmp = "t" + str(self.tmpCount)
+        tmp = "t#" + str(self.tmpCount)
         self.tmpCount += 1
         return tmp
     
@@ -230,12 +337,14 @@ class IRHelper:
         return label
 
     def emit(self, code):
-        self.code.append(code)
+        self.code.append(Instr(code))
 
     def backpatch(self,st_list,target_label):
         #set the target label for the statements in the list
         for x in st_list:
-            self.code[x] += str(target_label)
+            if self.code[x].label == '':
+                self.code[x].label = str(target_label)
+                self.code[x].code += str(target_label)
     
     def nextquad(self):
         return len(self.code)
@@ -243,10 +352,7 @@ class IRHelper:
     def dump_code(self, filename):
         with open(filename, 'w') as f:
             for idx, instr in enumerate(self.code):
-                if instr[-1] == ':':
-                    f.write(instr + "\n")
-                else:
-                    f.write(str(idx) + "\t" + instr + "\n")
+                f.write(str(idx) + "\t" + str(instr) + "\n")
         # print(self.code)
 
 tac = IRHelper()
