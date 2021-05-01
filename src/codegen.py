@@ -1,5 +1,8 @@
 from parser import symtable
 
+def binary(num):
+    return ''.join('{:0>8b}'.format(c) for c in struct.pack('!f', num))
+
 class AssemblyGen:
     def __init__(self, code):
         self.code = code
@@ -73,7 +76,7 @@ class AssemblyGen:
         self.addr_d[name] = reg
         self.reg_d[reg] = name
     
-    def get_symbol(self, name, reg=False): # TODO: think of some good name for this function !!
+    def get_symbol(self, name, reg=False, float=False): # TODO: think of some good name for this function !!
         """ returns register / memory where symbol name is stored """
         if name in self.addr_d:
             return '%' + self.reg_name[self.addr_d[name]]
@@ -237,6 +240,14 @@ class AssemblyGen:
                 self.add(f'mov {self.get_addr(code.e1)}, {r}')
             self.add(f'neg {r}')
         elif code.op == 'float-':
+            # 
+            # r = self.get_symbol(code.e2, reg=True, float=True)
+            
+            binaryCode = binary(float(0.0))
+            #get a free reg to store 0.0 and then subtract e1 from it?
+            self.add(f'mov {r}, 0b' + str(binaryCode))
+            self.add(f'sub edi {self.get_addr(code.e1)}' )
+            unar
             # TODO:
             raise Exception('floats are not handled')
         elif code.op == 'int2float':
@@ -405,6 +416,107 @@ class AssemblyGen:
             self.add(f'cmp {self.get_symbol(code.e1)}, {r2}')
             self.spillreg(self.reg_no['eax'])
             self.add(f'setge %al')
+            self.add(f'movzbl %al, %eax')
+            self.reg_d[self.reg_no['eax']] = code.e3
+            self.addr_d[code.e3] = self.reg_no['eax']
+        elif code.op == "float+":
+            # fadd e1, e2
+            r2 = self.get_symbol(code.e3, reg=True, float = True)
+            
+            # copy e2 into e3
+            self.add(f'mov {self.get_symbol(code.e2)}, {r2}')
+
+            self.add(f'fadd {self.get_symbol(code.e1)}, {r2}')
+        elif code.op == "float-":
+            # fsub e1, e2
+            r2 = self.get_symbol(code.e3, reg=True, float = True)
+            
+            # copy e2 into e3
+            self.add(f'mov {self.get_symbol(code.e2)}, {r2}')
+
+            self.add(f'fsub {self.get_symbol(code.e1)}, {r2}')
+        
+        elif code.op == "float*":
+            # fmul e1, e2
+            r2 = self.get_symbol(code.e3, reg=True, float = True)
+            
+            # copy e2 into e3
+            self.add(f'mov {self.get_symbol(code.e2)}, {r2}')
+
+            self.add(f'fmul {self.get_symbol(code.e1)}, {r2}')
+
+        elif code.op == "float/":
+            # fdiv e1, e2
+            r2 = self.get_symbol(code.e3, reg=True, float = True)
+            
+            # copy e2 into e3
+            self.add(f'mov {self.get_symbol(code.e2)}, {r2}')
+
+            self.add(f'fdiv {self.get_symbol(code.e1)}, {r2}')
+        elif code.op == 'float==':
+            # cmp e1 e2
+            # at least one should be register, let r2 is register
+            r2 = self.get_symbol(code.e2, reg=True, float = True)
+
+            self.add(f'fcomip {self.get_symbol(code.e1)}, {r2}')
+            self.spillreg(self.reg_no['eax'])
+            self.add(f'sete %al')
+            self.add(f'movzbl %al, %eax')
+            self.reg_d[self.reg_no['eax']] = code.e3
+            self.addr_d[code.e3] = self.reg_no['eax']
+        elif code.op == 'float!=':
+            # cmp e1 e2
+            # at least one should be register, let r2 is register
+            r2 = self.get_symbol(code.e2, reg=True, float = True)
+
+            self.add(f'fcomip {self.get_symbol(code.e1)}, {r2}')
+            self.spillreg(self.reg_no['eax'])
+            self.add(f'setne %al')
+            self.add(f'movzbl %al, %eax')
+            self.reg_d[self.reg_no['eax']] = code.e3
+            self.addr_d[code.e3] = self.reg_no['eax']
+        elif code.op == 'float<':
+            # cmp e1 e2
+            # at least one should be register, let r2 is register
+            r2 = self.get_symbol(code.e2, reg=True, float = True)
+
+            self.add(f'fcomip {self.get_symbol(code.e1)}, {r2}')
+            self.spillreg(self.reg_no['eax'])
+            self.add(f'setb %al')
+            self.add(f'movzbl %al, %eax')
+            self.reg_d[self.reg_no['eax']] = code.e3
+            self.addr_d[code.e3] = self.reg_no['eax']
+        elif code.op == 'float<=':
+            # cmp e1 e2
+            # at least one should be register, let r2 is register
+            r2 = self.get_symbol(code.e2, reg=True, float = True)
+
+            self.add(f'fcomip {self.get_symbol(code.e1)}, {r2}')
+            self.spillreg(self.reg_no['eax'])
+            self.add(f'setbe %al')
+            self.add(f'movzbl %al, %eax')
+            self.reg_d[self.reg_no['eax']] = code.e3
+            self.addr_d[code.e3] = self.reg_no['eax']
+
+        elif code.op == 'float>':
+            # fcmip e1 e2
+            # at least one should be register, let r2 is register
+            r2 = self.get_symbol(code.e2, reg=True, float = True)
+
+            self.add(f'fcomip {self.get_symbol(code.e1)}, {r2}')
+            self.spillreg(self.reg_no['eax'])
+            self.add(f'seta %al')
+            self.add(f'movzbl %al, %eax')
+            self.reg_d[self.reg_no['eax']] = code.e3
+            self.addr_d[code.e3] = self.reg_no['eax']
+        elif code.op == 'float>=':
+            # cmp e1 e2
+            # at least one should be register, let r2 is register
+            r2 = self.get_symbol(code.e2, reg=True, float = True)
+
+            self.add(f'fcomip {self.get_symbol(code.e1)}, {r2}')
+            self.spillreg(self.reg_no['eax'])
+            self.add(f'setae %al')
             self.add(f'movzbl %al, %eax')
             self.reg_d[self.reg_no['eax']] = code.e3
             self.addr_d[code.e3] = self.reg_no['eax']
