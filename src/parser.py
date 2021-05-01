@@ -123,7 +123,7 @@ def p_constant_s(p):
 def p_identifier(p):
     ''' identifier : IDENTIFIER
     '''
-    p[0] = Identifier(p[1])
+    p[0] = VarIdentifier(p[1])
 
 def p_primary_expression(p):
     ''' primary_expression : identifier
@@ -151,8 +151,8 @@ def p_postfix_expression_arr(p):
     p[0] = PostfixExpr(p[1], '[', p[3])
 
 def p_postfix_expression_call(p):
-    ''' postfix_expression : postfix_expression '(' ')'
-            | postfix_expression '(' argument_expression_list ')'
+    ''' postfix_expression : IDENTIFIER '(' ')'
+            | IDENTIFIER '(' argument_expression_list ')'
     '''
     if len(p) == 4:
         p[0] = PostfixExpr(p[1], '(', None)

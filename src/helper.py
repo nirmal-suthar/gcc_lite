@@ -76,7 +76,7 @@ class SymbolTable():
 
         self.scope_stack = [self.global_scope]
         self.tmp_cnt = 0 #for three address code temp variables
-        self.cur_idx = 0 # for changing scope while 3ac generation
+        self.tac_scope_idx = 0 # for changing scope while 3ac generation
     
     def cur_depth(self):
         return len(self.scope_stack)
@@ -110,8 +110,8 @@ class SymbolTable():
 
     def push_scope(self, scope_type='Other', exists=False) -> None:
         if exists:
-            self.scope_stack.append(self.all_scope[self.cur_idx + 1])
-            self.cur_idx += 1
+            self.scope_stack.append(self.all_scope[self.tac_scope_idx + 1])
+            self.tac_scope_idx += 1
             return
         new_scope = ScopeTable(self.cur_depth(), self.scope_stack[-1], len(self.all_scope), scope_type)
         self.all_scope.append(new_scope)
@@ -323,7 +323,16 @@ class IRHelper:
     def __init__(self):
         self.tmpCount = 0
         self.labelCount = 0
+        self.code = None
+        self.func_code = None
+
+    def push_func_code(self):
         self.code = []
+        if self.func_code is None:
+            self.func_code = [self.code]
+        else:
+            self.func_code.append(self.code)
+        self.tmpCount = 0
 
     def newtmp(self):
         #get a new symtable temporary, may put in symbol table
@@ -338,6 +347,7 @@ class IRHelper:
 
     def emit(self, code):
         self.code.append(Instr(code))
+        # print(len(self.code))
 
     def backpatch(self,st_list,target_label):
         #set the target label for the statements in the list
@@ -351,9 +361,10 @@ class IRHelper:
 
     def dump_code(self, filename):
         with open(filename, 'w') as f:
-            for idx, instr in enumerate(self.code):
-                f.write(str(idx) + "\t" + str(instr) + "\n")
-        # print(self.code)
+            for func in self.func_code:
+                for idx, instr in enumerate(func):
+                    f.write(str(idx) + "\t" + str(instr) + "\n")
+                f.write('\n')
 
 tac = IRHelper()
 

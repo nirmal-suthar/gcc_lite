@@ -23,6 +23,7 @@ class _BASENODE:
         self.continuelist = []
         self.truelist = []
         self.falselist = []
+        self.returnlist = []
 
     @staticmethod
     def _gen_dot(obj):
@@ -216,7 +217,7 @@ class VarType(_BASENODE):
             type_string = self._type
         else:
             type_string = str(self._type)
-        return type_string + " " + "*" * self.ref_count
+        return type_string + ((" " + "*" * self.ref_count) if self.ref_count>0 else "")
     
     def __repr__(self):
         return str(self)
@@ -245,7 +246,9 @@ class BaseExpr(_BASENODE) :
     def __init__(self, t_name):
         super().__init__()
         self.t_name = t_name
+        self.bool = False
         self.attr_ignore.append('t_name')
+        self.attr_ignore.append('bool')
 
         # default type for error reporting
         self.expr_type = VarType(0, 'int')
@@ -320,7 +323,11 @@ class Const(BaseExpr):
         self.get_type()
 
     def gen(self):
-        self.place = self.const
+
+        # in case of constant we store the trimmed constant
+        # val as the place
+        self.place = '$'+self.const
+        
         if getattr(self, 'bool', False):
             self.truelist = [tac.nextquad()]
             self.falselist = [tac.nextquad() + 1]
@@ -346,9 +353,10 @@ class Const(BaseExpr):
         dot_list = ['Const', obj.expr_type._gen_dot(obj.expr_type), obj.const]
         return dot_list
 
-class Identifier(BaseExpr):
+class VarIdentifier(BaseExpr):
+    "Class for storing the Variable Identifier"
     def __init__(self, name: str):
-        super().__init__("Identifier")
+        super().__init__("VarIdentifier")
         self.name = name
         self.get_type()
     
@@ -356,27 +364,18 @@ class Identifier(BaseExpr):
         self.place = self.name # resolved using symtable during code generation
         if getattr(self, 'bool', False):
             self.truelist = [tac.nextquad()]
-            self.falselist = [tac.nextquad() + 1]
             tac.emit(f"ifnz {self.place} goto ")
+            self.falselist = [tac.nextquad()]
             tac.emit(f"goto ")
 
     def get_type(self):
         _var = symtable.lookup_var(self.name)
         if _var is None:
-            _var = symtable.lookup_func(self.name)
-            if _var is None:
-                _var = symtable.lookup_struct(self.name)
-                if _var is None:
-                    compilation_err.append('Undeclared Variable {}'.format(self.name))
-                    parser.error = compilation_err[-1]
-                    parser_error()
-                else:
-                    self.expr_type = _var
-            else:
-                self.expr_type = _var
+            compilation_err.append('Undeclared Variable {}'.format(self.name))
+            parser.error = compilation_err[-1]
+            parser_error()
         else:
             self.expr_type = _var
-        # print(self.name, self.expr_type)
 
 class OpExpr(BaseExpr):
     def __init__(
@@ -478,9 +477,7 @@ class OpExpr(BaseExpr):
             self.lhs.expr_type._type not in self.ops_type[self.ops] and
             self.rhs.expr_type._type not in self.ops_type[self.ops]
         ):
-            compilation_err.append('Type not compatible with ops {}'.format(self.ops))
-            parser.error = compilation_err[-1]
-            parser_error()
+            parser_error(f'Invalid operands to ops {self.ops} (have `{self.lhs.expr_type}` and `{self.rhs.expr_type}`)')
 
         if self.ops in ['>', '>=', '<', '<=']:
             if self.lhs.expr_type.get_caste_type(self.rhs.expr_type):
@@ -667,7 +664,7 @@ class UnaryExpr(OpExpr):
                 parser.error = compilation_err[-1]
                 parser_error()
         elif self.ops == '&':
-            if not isinstance(self.rhs, Identifier):
+            if not isinstance(self.rhs, VarIdentifier):
                 compilation_err.append('RHS should be an indentifier')
                 parser.error = compilation_err[-1]
                 parser_error()
@@ -1339,6 +1336,7 @@ class LabeledStmt(Statement):
         self.stmt.gen()
         self.breaklist = getattr(self.stmt, 'breaklist', [])
         self.nextlist = getattr(self.stmt, 'nextlist', [])
+        self.returnlist = getattr(self.stmt, 'returnlist', [])
 
 class CompoundStmt(Statement):
     def __init__(
@@ -1359,6 +1357,7 @@ class CompoundStmt(Statement):
         
         self.breaklist = []
         self.continuelist = []
+        self.returnlist = []
 
         if self.stmt_list:
             for idx, stmt in enumerate(self.stmt_list):
@@ -1367,6 +1366,7 @@ class CompoundStmt(Statement):
 
                 self.breaklist += getattr(stmt, 'breaklist', [])
                 self.continuelist += getattr(stmt, 'continuelist', [])
+                self.returnlist += getattr(stmt, 'returnlist', [])
 
             if self.stmt_list == []:
                 self.nextlist = []
@@ -1429,6 +1429,7 @@ class SelectionStmt(Statement):
                 self.else_stmt.gen()
 
                 self.nextlist += getattr(self.if_stmt, 'nextlist', []) + getattr(self.else_stmt, 'nextlist', [])
+                self.returnlist += getattr(self.if_stmt, 'returnlist', []) + getattr(self.else_stmt, 'returnlist', [])
             # if statement
             else:
                 self.select_expr.bool = True
@@ -1439,6 +1440,7 @@ class SelectionStmt(Statement):
                 self.if_stmt.gen()
 
                 self.nextlist = getattr(self.if_stmt, 'nextlist', []) + getattr(self.select_expr, 'falselist', [])
+                self.returnlist = getattr(self.if_stmt, 'returnlist', []) + getattr(self.select_expr, 'returnlist', [])
         # switch
         else:
             self.select_expr.gen()
@@ -1453,6 +1455,7 @@ class SelectionStmt(Statement):
             case_labels = []
             case_labels.append(tac.nextquad())
             self.breaklist = []
+            self.returnlist = []
 
             for idx, case_stmt in enumerate(case_stmts):
                 case_stmt.breaklabel = self.nextlist
@@ -1466,6 +1469,7 @@ class SelectionStmt(Statement):
                     tac.emit(f'goto ')
                     
                 self.breaklist += getattr(case_stmt, 'breaklist', [])
+                self.returnlist += getattr(case_stmt, 'returnlist', [])
 
                 case_list.append(case_stmt.case)
             
@@ -1539,6 +1543,10 @@ class IterStmt(Statement):
 
                 tac.emit(f'goto {begin}')
 
+        # return list 
+        self.returnlist = getattr(self.stmt, 'returnlist', [])
+            
+
 class JumpStmt(Statement):
     def __init__(self, jump_type, expr=None):
         super().__init__("Jump Statement")
@@ -1550,7 +1558,13 @@ class JumpStmt(Statement):
         elif self.jump_type == 'continue':
             if not symtable.check_continue_scope():
                 parser_error('`continue` statement not within a loop')
-    
+        # elif self.jump_type == 'return':
+        #     if self.expr.expr_type != (function_type):
+        #         parser_error('')
+        # # check the return type with function scope
+        # i
+
+
     def gen(self):
         if self.jump_type == 'continue':
             self.continuelist = [tac.nextquad()]
@@ -1562,7 +1576,14 @@ class JumpStmt(Statement):
             if self.expr:
                 self.expr.gen()
                 tac.backpatch(getattr(self.expr, 'nextlist', []), tac.nextquad())
-            tac.emit(f'return')
+            
+            # only generate return stmt when there is expr to return
+            if self.expr is not None:
+                tac.emit(f'return {self.expr.place}')
+            
+            self.returnlist = [tac.nextquad()]
+            # in all return stmt, goto the end of function for call seq cleanup
+            tac.emit(f'goto ')
 
 
 # #############################################################################
@@ -1688,9 +1709,13 @@ class FuncDef(Node):
         symtable.add_func(Function(self.vartype, self.name, self.param_list, is_declared=True))
 
     def gen(self):
-        tac.emit(f'func {self.name}')
+        tac.push_func_code()
+        tac.emit(f'FuncBegin {self.name}')
         self.stmt.gen()
         self.nextlist = getattr(self.stmt, 'nextlist', [])
+        tac.backpatch(getattr(self.stmt, 'returnlist', []), tac.nextquad())
+        tac.emit(f'FuncEnd {self.name}')
+
 
     @staticmethod
     def _gen_dot(obj):

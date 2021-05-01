@@ -61,9 +61,9 @@ if __name__ == "__main__":
 
     tac.dump_code(args.out.split('.')[-2] + '.out')
 
-    asm = AssemblyGen(tac.code)
-    asm.gen_assembly()
-    asm.dump_code(args.out.split('.')[-2] + '.s')
+    # asm = AssemblyGen(tac.code)
+    # asm.gen_assembly()
+    # asm.dump_code(args.out.split('.')[-2] + '.s')
 
     AST = syntax_tree.gen_dot(graph)
 
