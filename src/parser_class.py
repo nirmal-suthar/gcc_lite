@@ -153,8 +153,10 @@ class VarType(_BASENODE):
                 return CHAR_SIZE
             elif self._type == 'float':
                 return FLOAT_SIZE
+            elif self._type == 'void':
+                return 0
             else:
-                raise Exception("Invalid type")
+                raise Exception(f'Invalid type {self._type}')
 
     def get_ref_size(self):
         return VarType(self.ref_count - 1, self._type).get_size()
@@ -353,10 +355,10 @@ class Const(BaseExpr):
         dot_list = ['Const', obj.expr_type._gen_dot(obj.expr_type), obj.const]
         return dot_list
 
-class VarIdentifier(BaseExpr):
+class Identifier(BaseExpr):
     "Class for storing the Variable Identifier"
     def __init__(self, name: str):
-        super().__init__("VarIdentifier")
+        super().__init__("Identifier")
         self.name = name
         self.get_type()
     
@@ -371,11 +373,16 @@ class VarIdentifier(BaseExpr):
     def get_type(self):
         _var = symtable.lookup_var(self.name)
         if _var is None:
-            compilation_err.append('Undeclared Variable {}'.format(self.name))
-            parser.error = compilation_err[-1]
-            parser_error()
+            _var = symtable.lookup_func(self.name)
+            if _var is None:
+                compilation_err.append('Undeclared Variable {}'.format(self.name))
+                parser.error = compilation_err[-1]
+                parser_error()
+            else:
+                self.expr_type = _var
         else:
             self.expr_type = _var
+        # print(self.name, self.expr_type)
 
 class OpExpr(BaseExpr):
     def __init__(
@@ -664,7 +671,7 @@ class UnaryExpr(OpExpr):
                 parser.error = compilation_err[-1]
                 parser_error()
         elif self.ops == '&':
-            if not isinstance(self.rhs, VarIdentifier):
+            if not isinstance(self.rhs, Identifier):
                 compilation_err.append('RHS should be an indentifier')
                 parser.error = compilation_err[-1]
                 parser_error()
@@ -681,8 +688,11 @@ class PostfixExpr(OpExpr):
         super().__init__(lhs, ops, rhs)
 
     def gen(self):
-        self.place = tac.newtmp()
-        symtable.add_var(self.place, self.expr_type)
+        self.place = '#'
+        # populate self.place when it is not void
+        if self.expr_type != VarType(0, 'void'):
+            self.place = tac.newtmp()
+            symtable.add_var(self.place, self.expr_type)
 
         if self.ops == '++':
             self.lhs.gen()
@@ -705,9 +715,28 @@ class PostfixExpr(OpExpr):
             
             tac.emit(f"{self.place} = {self.lhs.place} [ {self.rhs.place} ]")
         elif self.ops == '(':
-            if self.rhs == None:
+            if self.lhs.expr_type.name in ['printf', 'scanf']:
                 self.lhs.gen()
-                tac.emit(f"call {self.lhs.place}")
+
+                # generate code for parameters other than first one
+                for param in self.rhs[1:]:
+                    param.gen()
+                    tac.backpatch(getattr(param, 'nextlist', []), tac.nextquad())
+
+                # push parameters other than the first one
+                for param in reversed(self.rhs[1:]):
+                    tac.emit(f"param {param.place}")
+
+                fmt_sym = tac.fmt_string()
+                symtable.add_fmt(fmt_sym, self.rhs[0].const)
+                tac.emit(f'param ${fmt_sym}')
+
+                # call the function
+                tac.emit(f"call {self.lhs.place} {self.place}")
+            
+            elif self.rhs == None:
+                self.lhs.gen()
+                tac.emit(f"call {self.lhs.place} {self.place}")
             else:
                 self.lhs.gen()
 
@@ -721,7 +750,7 @@ class PostfixExpr(OpExpr):
                     tac.emit(f"param {param.place}")
 
                 # call the function
-                tac.emit(f"call {self.lhs.place}")
+                tac.emit(f"call {self.lhs.place} {self.place}")
 
     def get_type(self):
         
@@ -795,9 +824,19 @@ class PostfixExpr(OpExpr):
                     parser.error = compilation_err[-1]
                     parser_error()
 
-                if len(arg_list) == len(func.args):
+                if func.name in ['printf', 'scanf']:
+                    if len(arg_list) < 1:
+                        parser_error('too few/many arguments to function {}'.format(func.name))
+                    # check if first arg is list
+                    elif isinstance(arg_list[0], Const) and arg_list[0].expr_type == VarType(1, 'char'):
+                        inferred_type = func.ret_type._type
+                        ref_count = func.ret_type.ref_count
+                    else:
+                        parser_error(f'expected string as first arguments to function {func.name}')
+                elif len(arg_list) == len(func.args):
                     inferred_type = func.ret_type._type
                     ref_count = func.ret_type.ref_count
+                    # TODO: add argument checking logic and typecasting it!
                 else:
                     compilation_err.append('too few/many arguments to function {}'.format(func.name))
                     parser.error = compilation_err[-1]

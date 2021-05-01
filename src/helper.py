@@ -2,6 +2,13 @@ import csv
 from parser import parser_error
 import re
 
+stdlib = '''
+int printf(char *s);
+int scanf(char *s);
+
+// TODO: add malloc, free and math function
+'''
+
 # def parser_error(error_str=None):
 #     parser.compilation_err = True
 #     print(bcolors.BOLD+'{}:{}:'.format(lexer.filename,lexer.lineno)+bcolors.ENDC,end='')
@@ -46,6 +53,7 @@ class ScopeTable:
 
         elif self.metadata == 'Function':
             if is_param:
+
                 offset = self.param_size + 2*ADDR_SIZE + vtype.get_size() # 2 ADDR_SIZE for return addr and rbp
                 self.param_size += vtype.get_size()
             else:
@@ -77,7 +85,8 @@ class SymbolTable():
         self.scope_stack = [self.global_scope]
         self.tmp_cnt = 0 #for three address code temp variables
         self.tac_scope_idx = 0 # for changing scope while 3ac generation
-    
+        self.fmt_var = {} # stores the fmt strings used in printf, scanf
+
     def cur_depth(self):
         return len(self.scope_stack)
 
@@ -188,12 +197,19 @@ class SymbolTable():
                 return
 
             if func_.ret_type == func.ret_type and func_.args == func.args:
+                func.scope_id = len(self.all_scope)-1
+                self.function[func.name] = func
                 return
 
             parser_error('Redeclaration of function named {}'.format(func.name))
             return
+
         func.scope_id = len(self.all_scope)-1
         self.function[func.name] = func
+
+    # for enabling printf and scanf
+    def add_fmt(self, label, fmt_str):
+        self.fmt_var[label] = fmt_str
 
     #this will give a temp for three address code
     def get_temp_for_ir(self):
@@ -283,9 +299,10 @@ class Instr:
             self.e2 = m.group('e2')
             self.e3 = m.group('e3')
 
-        elif m := re.fullmatch('call (?P<e1>[^ ]*)', code):
+        elif m := re.fullmatch('call (?P<e1>[^ ]*) (?P<e2>[^ ]*)', code):
             self.instr = 'call'
             self.e1 = m.group('e1')
+            self.e2 = m.group('e2')
 
         elif m := re.fullmatch('param (?P<e1>[^ ]*)', code):
             self.instr = 'push param'
@@ -308,12 +325,20 @@ class Instr:
             self.e2 = m.group('e2')
             self.label = m.group('label')
 
-        elif m := re.fullmatch('return', code):
+        elif m := re.fullmatch('return (?P<e1>[^ ]*)', code):
             self.instr = 'return'
-        
-        elif m := re.fullmatch('func (?P<e1>[^ ]*)', code):
-            self.instr = 'func'
             self.e1 = m.group('e1')
+        
+        elif m := re.fullmatch('FuncBegin (?P<e1>[^ ]*)', code):
+            self.instr = 'FuncBegin'
+            self.e1 = m.group('e1')
+        
+        elif m := re.fullmatch('FuncEnd (?P<e1>[^ ]*)', code):
+            self.instr = 'FuncEnd'
+            self.e1 = m.group('e1')
+        
+        else:
+            raise Exception(f'regex not handled! {code}')
     
     def __str__(self):
         return self.code
@@ -323,8 +348,14 @@ class IRHelper:
     def __init__(self):
         self.tmpCount = 0
         self.labelCount = 0
-        self.code = None
+        self.code = []
         self.func_code = None
+        self.fmtCount = 0
+
+    def fmt_string(self,):
+        label = f'FMT{self.fmtCount}'
+        self.fmtCount += 1
+        return label
 
     def push_func_code(self):
         self.code = []

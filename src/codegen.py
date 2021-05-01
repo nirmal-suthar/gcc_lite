@@ -1,4 +1,7 @@
 from parser import symtable
+import re
+
+from parser_class import Function
 
 class AssemblyGen:
     def __init__(self, func_code):
@@ -46,12 +49,16 @@ class AssemblyGen:
 
     def get_addr(self, name_info, displ=False):
         """ get memory address of name """
-        if isinstance(name_info, str):
+
+        if re.fullmatch('\$.*', name_info):
+            return name_info
+        elif isinstance(name_info, str):
             # if argument is name of symbol then get info from scope/symbol table
             name = name_info
             name_info = self.get_info(name_info)
             if name_info == None: # possibly constant value
-                return '$' + name
+                # return '$' + name
+                raise Exception(f'hii {name}')
 
         if name_info['scope_id'] == 0:
             # global variables are stored in .data section
@@ -100,10 +107,10 @@ class AssemblyGen:
         self.add('.text')
         self.add('.global main')
 
-        # for code in enumerate(self.func_code):
-        #     self.code_idx = 0
-        #     if str(idx) in self.
-
+        # add fmt string info
+        for (label, fmt_str) in symtable.fmt_var.items():
+            self.add(f'{label}:')
+            self.add (f'.string {fmt_str}')
 
         # start traversing the IR (one function at a time!)
         for fidx, codes in enumerate(self.func_code):
@@ -123,12 +130,13 @@ class AssemblyGen:
                 if str(idx) in self.labels:
                     self.add(f'{self.labels[str(idx)]}:')
                 
+                self.add(f'// {code}')
                 # gen it!
                 self.gen_instr(code)
 
             # FIXME: don't know what it is for
-            if str(len(self.code)) in self.labels:
-                self.add(f'{self.labels[str(len(self.code))]}:')
+            if str(len(codes)) in self.labels:
+                self.add(f'{self.labels[str(len(codes))]}:')
         
     def gen_instr(self, code):
         """ generate x86 from 3AC instr """
@@ -172,8 +180,21 @@ class AssemblyGen:
 
 
         elif code.instr == 'call':
+
+            self.spillreg(self.reg_no['eax'])
+
             # assuming label for the function is same as name of the function
             self.add(f'call {code.e1}')
+
+            FuncType = symtable.lookup_func(code.e1)
+            if FuncType is None:
+                raise Exception(f'functype is none {code.e1}')
+
+            self.add(f'add {FuncType.param_size()}, %esp')
+
+            if code.e2 != '#':
+                self.reg_d[self.reg_no['eax']] = code.e2
+                self.addr_d[code.e2] = self.reg_no['eax']
 
             # TODO: unallocate parameters which are pushed by `add {size} %esp` instruction
 
@@ -219,23 +240,31 @@ class AssemblyGen:
             self.add(f'je {self.labels[code.label]}')
 
         elif code.instr == 'return':
-            # FIXME move the expr part of ret to eax and do nothing
-            raise Exception('return type, implement me i m very easy to fix :p')
-            self.add('pop %ebp')
-            self.add('ret')
-        
+            
+            self.spillreg(self.reg_no['eax'])
+            self.loadreg(self.reg_no['eax'], code.e1)
+            
         elif code.instr == 'FuncBegin':
             self.add(f'{code.e1}:')
             self.add(f'push %ebp')
             self.add(f'mov %esp, %ebp')
-            func = symtable.lookup_func(code.e1)
-            self.add(f'sub ${hex(symtable.all_scope[func.scope_id].size)}, %esp')
-
+            # func = symtable.lookup_func(code.e1)
+            self.add(f'sub ${hex(code.scope.size)}, %esp')
+            self.add(f'push %ebx')
+            self.add(f'push %ecx')
+            self.add(f'push %edx')
+            self.add(f'push %esi')
+            self.add(f'push %edi')
+            
         elif code.instr == 'FuncEnd':
-            self.add(f'pop %ebp')
+            self.add(f'pop %ebx')
+            self.add(f'pop %ecx')
+            self.add(f'pop %edx')
+            self.add(f'pop %esi')
+            self.add(f'pop %edi')
             self.add(f'mov %ebp, %esp')
-            self.add(f'ret')
-
+            self.add(f'pop %ebp')
+            self.add(f'ret ')  
         else:
             raise Exception(f'Invalid code instr = {code.instr}')
 

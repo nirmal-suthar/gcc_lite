@@ -4,7 +4,7 @@ import sys, argparse, pydot
 from argparse import ArgumentParser
 # from parser import parser, lexer, symtable
 from parser import parser, lexer
-from helper import symtable, tac
+from helper import symtable, tac, stdlib
 from codegen import AssemblyGen
 
 
@@ -50,7 +50,8 @@ if __name__ == "__main__":
     lexer.filename = args.input 
     lexer.lines = ifile.split("\n")
 
-    syntax_tree = parser.parse(ifile)
+    # syntax_tree = parser.parse(stdlib)
+    syntax_tree = parser.parse(stdlib+ifile)
 
     if syntax_tree is None or parser.compilation_err:
         exit(1)
@@ -61,9 +62,9 @@ if __name__ == "__main__":
 
     tac.dump_code(args.out.split('.')[-2] + '.out')
 
-    # asm = AssemblyGen(tac.code)
-    # asm.gen_assembly()
-    # asm.dump_code(args.out.split('.')[-2] + '.s')
+    asm = AssemblyGen(tac.func_code)
+    asm.gen_assembly()
+    asm.dump_code(args.out.split('.')[-2] + '.s')
 
     AST = syntax_tree.gen_dot(graph)
 

@@ -51,7 +51,7 @@ def p_push_scope(p):
         symtable.push_scope(p[-2].name)
     elif isinstance(p[-2], tuple):
         symtable.push_scope('Function')
-        _, _, _, args = p[-2]
+        _, _, name, args = p[-2]
         for name, _type in args:
             symtable.add_var(name, _type, is_param=True)
     else:
@@ -123,7 +123,7 @@ def p_constant_s(p):
 def p_identifier(p):
     ''' identifier : IDENTIFIER
     '''
-    p[0] = VarIdentifier(p[1])
+    p[0] = Identifier(p[1])
 
 def p_primary_expression(p):
     ''' primary_expression : identifier
@@ -151,8 +151,8 @@ def p_postfix_expression_arr(p):
     p[0] = PostfixExpr(p[1], '[', p[3])
 
 def p_postfix_expression_call(p):
-    ''' postfix_expression : IDENTIFIER '(' ')'
-            | IDENTIFIER '(' argument_expression_list ')'
+    ''' postfix_expression : postfix_expression '(' ')'
+            | postfix_expression '(' argument_expression_list ')'
     '''
     if len(p) == 4:
         p[0] = PostfixExpr(p[1], '(', None)
@@ -772,8 +772,12 @@ def p_function_definition(p):
     '''
     if len(p) == 5:
         p[0] = (p[1], 0, p[2], p[3])
+        vartype = VarType(0, p[1].type_spec)    
+        symtable.add_func(Function(vartype, p[2], p[3]))
     else:
         p[0] = (p[1], p[2], p[3], p[4])
+        vartype = VarType(p[1], p[2].type_spec)    
+        symtable.add_func(Function(vartype, p[3], p[4]))
 
 from lexer import lexer, tokens
 
