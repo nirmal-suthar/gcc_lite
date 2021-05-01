@@ -6,7 +6,7 @@ from argparse import ArgumentParser
 from parser import parser, lexer
 from helper import symtable, tac
 from codegen import AssemblyGen
-
+import os
 
 def arg_parser():
 
@@ -73,3 +73,7 @@ if __name__ == "__main__":
     if args.png:
         graph.write_png(png_file)
         print("Graph generated {}".format(png_file))
+
+    os.system("nasm -f elf32 fileio.s")
+    os.system("gcc -m32 fileio.o ")
+    os.system("./a.out")

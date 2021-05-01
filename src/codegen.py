@@ -100,6 +100,13 @@ class AssemblyGen:
         self.add('.text')
         self.add('.global main')
 
+        #For file io fns from fileio.s file
+        print("\textern fcreate1")
+        print("\textern fwrite2")
+        print("\textern fclose1")
+        print("\textern fopen1")
+        print("\textern fread2")
+
         self.labels = []
         for code in self.code:
             if hasattr(code, 'label'):
