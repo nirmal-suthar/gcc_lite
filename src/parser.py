@@ -3,12 +3,15 @@
 from ply import yacc
 
 def parser_error(error_str=None):
+    # subtracting stdlib offset for correct position info
+    stdlib_offset = len(stdlib.split('\n')) - 1
+
     parser.compilation_err = True
-    print(bcolors.BOLD+'{}:{}:'.format(lexer.filename,lexer.lineno)+bcolors.ENDC,end='')
+    print(bcolors.BOLD+f'{lexer.filename}:{lexer.lineno - stdlib_offset}:0'+bcolors.ENDC,end='')
     if error_str == None:
         error_str = parser.error
     print(bcolors.FAIL+' Error:'+bcolors.ENDC, error_str)
-    print('     {} |{}'.format(lexer.lineno,lexer.lines[lexer.lineno - 1]))
+    print('     {} |{}'.format(lexer.lineno - stdlib_offset,lexer.lines[lexer.lineno - 1]))
 
 
 class bcolors:
@@ -81,19 +84,22 @@ def p_switch_scope(p):
     p[0] = ScopeName('Switch')
 
 def p_error(p):
+    # subtracting stdlib offset for correct position info
+    stdlib_offset = len(stdlib.split('\n')) - 1
+
     position = (
         p.lexer.lexpos
         - sum(map(lambda line: len(line) + 1, p.lexer.lines[: p.lineno - 1]))
         - len(p.value)
         + 1
     )
-    print(bcolors.BOLD+'{}:{}:{}:'.format(p.lexer.filename,p.lineno, position)+bcolors.ENDC,end='')
-    print(bcolors.FAIL+' SyntaxError: '+bcolors.ENDC,'Unexpected token {}'.format(p.value))
-    print('     {} |{}'.format(p.lineno,p.lexer.lines[p.lineno - 1][:position-1]),end='')
+    print(f'{bcolors.BOLD}{p.lexer.filename}:{p.lineno - stdlib_offset}:{position}:{bcolors.ENDC}',end='')
+    print(f'{bcolors.FAIL} SyntaxError: {bcolors.ENDC}Unexpected token {p.value}')
+    print(f'     {p.lineno - stdlib_offset} |{p.lexer.lines[p.lineno - 1][:position-1]}',end='')
     print(bcolors.WARNING + bcolors.UNDERLINE + '{}'.format(
         p.lexer.lines[p.lineno - 1][position-1:position-1+len(p.value)]
         )+bcolors.ENDC+bcolors.ENDC,end='')
-    print('{}'.format(p.lexer.lines[p.lineno - 1][position-1+len(p.value):]))
+    print(f'{p.lexer.lines[p.lineno - 1][position-1+len(p.value):]}')
 
 
 # #############################################################################

@@ -44,14 +44,14 @@ if __name__ == "__main__":
     png_file = args.out.split('.')[-2] + '.png'
 
     with open(args.input, 'r') as f:
-        ifile = f.read()
+        arg_file = f.read()
     
-
+    
+    ifile = stdlib + arg_file
     lexer.filename = args.input 
     lexer.lines = ifile.split("\n")
 
-    # syntax_tree = parser.parse(stdlib)
-    syntax_tree = parser.parse(stdlib+ifile)
+    syntax_tree = parser.parse(ifile)
 
     if syntax_tree is None or parser.compilation_err:
         exit(1)
