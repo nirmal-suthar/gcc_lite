@@ -89,11 +89,17 @@ class StructType(_BASENODE):
         # For use in lambda struct and defined struct
         self.variables = variables
 
+        # For offset of each variable
+        self.size = 0
+        if self.variables:
+            self.set_offsets()
+
     def get_size(self):
-        size = 0
-        for var in self.variables:
-            size += self.variables[var].get_size()
-        return size
+        return self.size
+        # size = 0
+        # for var in self.variables:
+        #     size += self.variables[var].get_size()
+        # return size
 
     def __str__(self):
         return 'struct {} {{ {} }}'.format(self.name, self.variables)
@@ -105,9 +111,20 @@ class StructType(_BASENODE):
         sym_type = symtable.lookup_struct(self.name)
         if sym_type is not None:
             self.variables = sym_type.variables
+            # create offsets for each variable
+            self.set_offsets()
 
         return self.variables is not None
 
+    def set_offsets(self):
+        self.offsets = {}
+        for key, value in self.variables.items():
+            self.offsets[key] = self.size
+            self.size += value.get_size()
+    
+    def get_offset(self, name):
+        return self.offsets[name]
+    
     def _get_size(self):
         raise Exception('TODO')
 
@@ -171,7 +188,7 @@ class VarType(_BASENODE):
         return self._type
     
     def is_struct_type(self):
-        return (not self.is_pointer()) and isinstance(self, StructType)
+        return (not self.is_pointer()) and isinstance(self._type, StructType)
 
     def castable_to(self, other):
         if self.is_pointer():
@@ -363,7 +380,14 @@ class Identifier(BaseExpr):
         self.get_type()
     
     def gen(self):
-        self.place = self.name # resolved using symtable during code generation
+        if self.expr_type.is_struct_type():
+            # store starting addr of struct
+            self.place = tac.newtmp()
+            symtable.add_var(self.place, VarType(1, self.expr_type._type))
+            tac.emit(f"{self.place} = & {self.name}")
+        else:
+            self.place = self.name # resolved using symtable during code generation
+
         if getattr(self, 'bool', False):
             self.truelist = [tac.nextquad()]
             tac.emit(f"ifnz {self.place} goto ")
@@ -578,7 +602,12 @@ class UnaryExpr(OpExpr):
 
     def gen(self):
         self.place = tac.newtmp()
-        symtable.add_var(self.place, self.expr_type)
+        
+        if self.expr_type.is_struct_type():
+            # value of struct in 3ac == addr of starting position of struct
+            symtable.add_var(self.place, VarType(1, self.expr_type._type))
+        else:
+            symtable.add_var(self.place, self.expr_type)
 
         if self.ops == 'sizeof':
             tac.emit(f"{self.place} = {self.rhs.get_size()}")
@@ -600,7 +629,15 @@ class UnaryExpr(OpExpr):
             if self.ops == '-':
                 # TODO: in semantics, negation of pointer is syntax error
                 self.ops = self.expr_type.basic_type() + self.ops
-            tac.emit("{} = {} {}".format(self.place, self.ops, self.rhs.place))
+            
+            if self.rhs.expr_type.is_struct_type() and self.ops == '&':
+                # address of struct == addr of starting position of struct
+                tac.emit(f"{self.place} = {self.rhs.place}")
+            elif self.expr_type.is_struct_type() and self.ops == '*':
+                # value of struct == addr of starting position of struct == address of struct
+                tac.emit(f"{self.place} = {self.rhs.place}")
+            else:
+                tac.emit("{} = {} {}".format(self.place, self.ops, self.rhs.place))
         elif self.ops == '+':
             self.rhs.gen()
             tac.backpatch(getattr(self.rhs, 'nextlist', []), tac.nextquad())
@@ -687,24 +724,28 @@ class PostfixExpr(OpExpr):
         self.ops_type['--'] = ['int', 'char', 'float']
         super().__init__(lhs, ops, rhs)
 
-    def gen(self):
+    def gen(self, is_lhs=False):
         self.place = '#'
         # populate self.place when it is not void
         if self.expr_type != VarType(0, 'void'):
             self.place = tac.newtmp()
-            symtable.add_var(self.place, self.expr_type)
+            if self.expr_type.is_struct_type() or is_lhs:
+                # tac variables of struct points to the starting of struct
+                symtable.add_var(self.place, VarType(1 + self.expr_type.ref_count, self.expr_type._type))
+            else:
+                symtable.add_var(self.place, self.expr_type)
 
         if self.ops == '++':
             self.lhs.gen()
             tac.backpatch(getattr(self.lhs, 'nextlist', []), tac.nextquad())
             
-            tac.emit(f"{self.lhs.place} = {self.lhs.place} int+ 1")
+            tac.emit(f"{self.lhs.place} = {self.lhs.place} int+ $1")
             tac.emit(f"{self.place} = {self.lhs.place}")
         elif self.ops == '--':
             self.lhs.gen()
             tac.backpatch(getattr(self.lhs, 'nextlist', []), tac.nextquad())
             
-            tac.emit(f"{self.lhs.place} = {self.lhs.place} int- 1")
+            tac.emit(f"{self.lhs.place} = {self.lhs.place} int- $1")
             tac.emit(f"{self.place} = {self.lhs.place}")
         elif self.ops == '[':
             self.lhs.gen()
@@ -751,6 +792,26 @@ class PostfixExpr(OpExpr):
 
                 # call the function
                 tac.emit(f"call {self.lhs.place} {self.place}")
+        elif self.ops in ['.', '->']:
+            self.lhs.gen()
+            tac.backpatch(getattr(self.lhs, 'nextlist', []), tac.nextquad())
+
+            offset = self.lhs.expr_type._type.get_offset(self.rhs)
+            
+            var_type = self.lhs.expr_type._type.variables[self.rhs]
+
+            if var_type.is_struct_type():
+                # store only addr of struct
+                tac.emit(f"{self.place} = {self.lhs.place} int+ ${offset}")
+            else:
+                if is_lhs:
+                    tac.emit(f"{self.place} = {self.lhs.place} int+ ${offset}")
+                else:
+                    var_addr = tac.newtmp()
+                    symtable.add_var(var_addr, VarType(1, var_type._type))
+
+                    tac.emit(f"{var_addr} = {self.lhs.place} int+ ${offset}")
+                    tac.emit(f"{self.place} = * {var_addr}")
 
     def get_type(self):
         
@@ -947,7 +1008,7 @@ class AssignExpr(OpExpr):
             self.rhs.gen()
             tac.backpatch(getattr(self.rhs, 'nextlist', []), tac.nextquad())
             
-            tac.emit(f"*{self.lhs.rhs.place} = {self.rhs.place}")
+            tac.emit(f"* {self.lhs.rhs.place} = {self.rhs.place}")
         elif isinstance(self.lhs, PostfixExpr) and self.lhs.ops == '[':
             self.lhs.lhs.gen()
             tac.backpatch(getattr(self.lhs.lhs, 'nextlist', []), tac.nextquad())
@@ -959,6 +1020,16 @@ class AssignExpr(OpExpr):
             tac.backpatch(getattr(self.rhs, 'nextlist', []), tac.nextquad())
             
             tac.emit(f"{self.lhs.lhs.place} [ {self.lhs.rhs.place} ] = {self.rhs.place}")
+        elif isinstance(self.lhs, PostfixExpr) and self.lhs.ops in ['.', '->']:
+            # we need self.lhs as lhs of '=' => it should be addr of some memory location which 
+            # '=' will update
+            self.lhs.gen(is_lhs=True)
+            tac.backpatch(getattr(self.lhs, 'nextlist', []), tac.nextquad())
+
+            self.rhs.gen()
+            tac.backpatch(getattr(self.rhs, 'nextlist', []), tac.nextquad())
+
+            tac.emit(f"* {self.lhs.place} = {self.rhs.place}")
         else:
             self.lhs.gen()
             tac.backpatch(getattr(self.lhs, 'nextlist', []), tac.nextquad())
@@ -1330,7 +1401,11 @@ class Declaration(_BaseDecl):
         for idx, init in enumerate(self.init_list):
             init.gen()
             tac.backpatch(getattr(init, 'nextlist', []), tac.nextquad())
-        self.nextlist = getattr(self.init_list[-1], 'nextlist', [])
+        
+        if len(self.init_list) > 0:
+            self.nextlist = getattr(self.init_list[-1], 'nextlist', [])
+        else:
+            self.nextlist = []
     
 
     @staticmethod

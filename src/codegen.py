@@ -248,8 +248,9 @@ class AssemblyGen:
             self.add(f'{code.e1}:')
             self.add(f'push %ebp')
             self.add(f'mov %esp, %ebp')
-            # func = symtable.lookup_func(code.e1)
-            self.add(f'sub ${hex(code.scope.size)}, %esp')
+            func = symtable.lookup_func(code.e1)
+            scope = symtable.all_scope[func.scope_id]
+            self.add(f'sub ${hex(scope.size + scope.child_max_size)}, %esp')
             self.add(f'push %ebx')
             self.add(f'push %ecx')
             self.add(f'push %edx')

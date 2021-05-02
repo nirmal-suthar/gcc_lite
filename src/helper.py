@@ -26,6 +26,7 @@ class ScopeTable:
         self.structs = {}               # for structs and union
         self.metadata = scope_type      # will include function, loop or ifelse
         self.size = 0
+        self.child_max_size = 0
         self.param_size = 0
 
 
@@ -58,11 +59,12 @@ class ScopeTable:
                 self.param_size += vtype.get_size()
             else:
                 offset = -(vtype.get_size() + self.size)
+                self.size = -offset
 
         else:
-            offset = -(self.parent.size + vtype.get_size())
-            self.parent.size += vtype.get_size()
-            self.size = self.parent.size
+            offset = -(self.parent.size + self.size + vtype.get_size())
+            self.size = self.size + vtype.get_size()
+            self.parent.child_max_size = max(self.parent.child_max_size, self.size)
 
         self.variables[name] = {'name': name, 'type': vtype, 'offset': offset, 'scope_id': self.scope_id}
     
@@ -308,7 +310,7 @@ class Instr:
             self.instr = 'push param'
             self.e1 = m.group('e1')
 
-        elif m := re.fullmatch('\*(?P<e2>[^ ]*) = (?P<e1>[^ ]*)', code):
+        elif m := re.fullmatch('\* (?P<e2>[^ ]*) = (?P<e1>[^ ]*)', code):
             self.instr = 'memory update'
             self.e1 = m.group('e1')
             self.e2 = m.group('e2')
