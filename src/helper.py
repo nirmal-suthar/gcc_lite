@@ -338,7 +338,16 @@ class Instr:
         elif m := re.fullmatch('FuncEnd (?P<e1>[^ ]*)', code):
             self.instr = 'FuncEnd'
             self.e1 = m.group('e1')
-        
+
+        elif m := re.fullmatch('printf (?P<e1>[^ ]*) (?P<e2>[^ ]*)', code):
+            self.instr = 'printf'
+            self.e1 = m.group('e1')
+            self.e2 = m.group('e2')
+
+        elif m := re.fullmatch('scanf (?P<e1>[^ ]*) (?P<e2>[^ ]*)', code):
+            self.instr = 'scanf'
+            self.e1 = m.group('e1')
+            self.e2 = m.group('e2')
         else:
             raise Exception(f'regex not handled! {code}')
     

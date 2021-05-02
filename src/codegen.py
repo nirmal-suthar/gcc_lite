@@ -178,7 +178,6 @@ class AssemblyGen:
             else:
                 self.add(f'{instr} {displ}(%ebp , {self.get_symbol(code.e2, reg=True)}, {self.get_info(code.e1)["type"].get_ref_size()}), {r}')
 
-
         elif code.instr == 'call':
 
             self.spillreg(self.reg_no['eax'])
@@ -190,13 +189,37 @@ class AssemblyGen:
             if FuncType is None:
                 raise Exception(f'functype is none {code.e1}')
 
-            self.add(f'add {FuncType.param_size()}, %esp')
+            self.add(f'add ${FuncType.param_size()}, %esp')
 
             if code.e2 != '#':
                 self.reg_d[self.reg_no['eax']] = code.e2
                 self.addr_d[code.e2] = self.reg_no['eax']
 
-            # TODO: unallocate parameters which are pushed by `add {size} %esp` instruction
+        elif code.instr == 'printf':
+
+            self.spillreg(self.reg_no['eax'])
+
+            # assuming label for the function is same as name of the function
+            self.add(f'call printf')
+
+            self.add(f'add ${code.e1}, %esp')
+
+            if code.e2 != '#':
+                self.reg_d[self.reg_no['eax']] = code.e2
+                self.addr_d[code.e2] = self.reg_no['eax']
+        
+        elif code.instr == 'scanf':
+
+            self.spillreg(self.reg_no['eax'])
+
+            # assuming label for the function is same as name of the function
+            self.add(f'call scanf')
+
+            self.add(f'add ${code.e1}, %esp')
+
+            if code.e2 != '#':
+                self.reg_d[self.reg_no['eax']] = code.e2
+                self.addr_d[code.e2] = self.reg_no['eax']
 
         elif code.instr == 'push param':
             self.add(f'push {self.get_symbol(code.e1)}')

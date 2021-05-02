@@ -397,13 +397,7 @@ class Identifier(BaseExpr):
     def get_type(self):
         _var = symtable.lookup_var(self.name)
         if _var is None:
-            _var = symtable.lookup_func(self.name)
-            if _var is None:
-                compilation_err.append('Undeclared Variable {}'.format(self.name))
-                parser.error = compilation_err[-1]
-                parser_error()
-            else:
-                self.expr_type = _var
+            parser_error(f'Undeclared Variable {self.name}')
         else:
             self.expr_type = _var
         # print(self.name, self.expr_type)
@@ -756,42 +750,45 @@ class PostfixExpr(OpExpr):
             
             tac.emit(f"{self.place} = {self.lhs.place} [ {self.rhs.place} ]")
         elif self.ops == '(':
-            if self.lhs.expr_type.name in ['printf', 'scanf']:
-                self.lhs.gen()
+            # stdio function (special as it contain variable number of args)
+            if self.lhs.name in ['printf', 'scanf']:
 
                 # generate code for parameters other than first one
                 for param in self.rhs[1:]:
                     param.gen()
                     tac.backpatch(getattr(param, 'nextlist', []), tac.nextquad())
 
+                args_size = 0
+
                 # push parameters other than the first one
                 for param in reversed(self.rhs[1:]):
+                    args_size += param.expr_type.get_size()
                     tac.emit(f"param {param.place}")
 
+                # add 4bytes for fmt_string
+                args_size += 4
                 fmt_sym = tac.fmt_string()
                 symtable.add_fmt(fmt_sym, self.rhs[0].const)
                 tac.emit(f'param ${fmt_sym}')
 
                 # call the function
-                tac.emit(f"call {self.lhs.place} {self.place}")
+                tac.emit(f"{self.lhs.name} {args_size} {self.place}")
             
-            elif self.rhs == None:
-                self.lhs.gen()
-                tac.emit(f"call {self.lhs.place} {self.place}")
+            # standard function call
             else:
-                self.lhs.gen()
+                args = [] if self.rhs is None else self.rhs
 
                 # generate code for parameters
-                for param in self.rhs:
+                for param in args:
                     param.gen()
                     tac.backpatch(getattr(param, 'nextlist', []), tac.nextquad())
 
                 # push parameters 
-                for param in reversed(self.rhs):
+                for param in reversed(args):
                     tac.emit(f"param {param.place}")
 
                 # call the function
-                tac.emit(f"call {self.lhs.place} {self.place}")
+                tac.emit(f"call {self.lhs.name} {self.place}")
         elif self.ops in ['.', '->']:
             self.lhs.gen()
             tac.backpatch(getattr(self.lhs, 'nextlist', []), tac.nextquad())
@@ -878,8 +875,10 @@ class PostfixExpr(OpExpr):
         elif self.ops == '(':
             arg_list = [] if self.rhs is None else self.rhs
             # sanity checking of function args and 
-            if isinstance(self.lhs.expr_type, Function):
-                func = self.lhs.expr_type
+
+            _var = symtable.lookup_func(self.lhs)
+            if isinstance(_var, Function):
+                func = self.lhs = _var
                 if func is None:
                     compilation_err.append('{} is not callable'.format(self.lhs))
                     parser.error = compilation_err[-1]
@@ -903,10 +902,9 @@ class PostfixExpr(OpExpr):
                     parser.error = compilation_err[-1]
                     parser_error()
             else:
-                compilation_err.append('called object is not a function or function pointer')
-                parser.error = compilation_err[-1]
-                parser_error()
-            
+                parser_error(f'called object {self.lhs} is not a function')
+
+
         # array reference
         elif self.ops == '[':
             if self.rhs.expr_type == VarType(0, 'int'):
