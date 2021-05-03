@@ -129,6 +129,9 @@ class SymbolTable():
         self.scope_stack.append(new_scope)
 
     def pop_scope(self) -> None:
+        scope = self.cur_scope() 
+        if scope.metadata != 'Global':
+            scope.parent.child_max_size = max(scope.parent.child_max_size, scope.size+scope.child_max_size)
         self.scope_stack.pop()
 
     def lookup_var(self, name):
@@ -199,14 +202,11 @@ class SymbolTable():
                 return
 
             if func_.ret_type == func.ret_type and func_.args == func.args:
-                func.scope_id = len(self.all_scope)-1
-                self.function[func.name] = func
                 return
 
             parser_error('Redeclaration of function named {}'.format(func.name))
             return
 
-        func.scope_id = len(self.all_scope)-1
         self.function[func.name] = func
 
     # for enabling printf and scanf

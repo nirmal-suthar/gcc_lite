@@ -54,7 +54,9 @@ def p_push_scope(p):
         symtable.push_scope(p[-2].name)
     elif isinstance(p[-2], tuple):
         symtable.push_scope('Function')
-        _, _, name, args = p[-2]
+        _, _, func_name, args = p[-2]
+        func = symtable.lookup_func(func_name)
+        func.scope_id = len(symtable.all_scope)-1
         for name, _type in args:
             symtable.add_var(name, _type, is_param=True)
     else:
