@@ -23,6 +23,7 @@ class _BASENODE:
         self.continuelist = []
         self.truelist = []
         self.falselist = []
+        self.returnlist = []
 
     @staticmethod
     def _gen_dot(obj):
@@ -88,11 +89,17 @@ class StructType(_BASENODE):
         # For use in lambda struct and defined struct
         self.variables = variables
 
+        # For offset of each variable
+        self.size = 0
+        if self.variables:
+            self.set_offsets()
+
     def get_size(self):
-        size = 0
-        for var in self.variables:
-            size += self.variables[var].get_size()
-        return size
+        return self.size
+        # size = 0
+        # for var in self.variables:
+        #     size += self.variables[var].get_size()
+        # return size
 
     def __str__(self):
         return 'struct {} {{ {} }}'.format(self.name, self.variables)
@@ -104,9 +111,20 @@ class StructType(_BASENODE):
         sym_type = symtable.lookup_struct(self.name)
         if sym_type is not None:
             self.variables = sym_type.variables
+            # create offsets for each variable
+            self.set_offsets()
 
         return self.variables is not None
 
+    def set_offsets(self):
+        self.offsets = {}
+        for key, value in self.variables.items():
+            self.offsets[key] = self.size
+            self.size += value.get_size()
+    
+    def get_offset(self, name):
+        return self.offsets[name]
+    
     def _get_size(self):
         raise Exception('TODO')
 
@@ -152,8 +170,10 @@ class VarType(_BASENODE):
                 return CHAR_SIZE
             elif self._type == 'float':
                 return FLOAT_SIZE
+            elif self._type == 'void':
+                return 0
             else:
-                raise Exception("Invalid type")
+                raise Exception(f'Invalid type {self._type}')
 
     def get_ref_size(self):
         return VarType(self.ref_count - 1, self._type).get_size()
@@ -168,7 +188,7 @@ class VarType(_BASENODE):
         return self._type
     
     def is_struct_type(self):
-        return (not self.is_pointer()) and isinstance(self, StructType)
+        return (not self.is_pointer()) and isinstance(self._type, StructType)
 
     def castable_to(self, other):
         if self.is_pointer():
@@ -216,7 +236,7 @@ class VarType(_BASENODE):
             type_string = self._type
         else:
             type_string = str(self._type)
-        return type_string + " " + "*" * self.ref_count
+        return type_string + ((" " + "*" * self.ref_count) if self.ref_count>0 else "")
     
     def __repr__(self):
         return str(self)
@@ -245,7 +265,9 @@ class BaseExpr(_BASENODE) :
     def __init__(self, t_name):
         super().__init__()
         self.t_name = t_name
+        self.bool = False
         self.attr_ignore.append('t_name')
+        self.attr_ignore.append('bool')
 
         # default type for error reporting
         self.expr_type = VarType(0, 'int')
@@ -320,7 +342,11 @@ class Const(BaseExpr):
         self.get_type()
 
     def gen(self):
-        self.place = self.const
+
+        # in case of constant we store the trimmed constant
+        # val as the place
+        self.place = '$'+self.const
+        
         if getattr(self, 'bool', False):
             self.truelist = [tac.nextquad()]
             self.falselist = [tac.nextquad() + 1]
@@ -347,33 +373,31 @@ class Const(BaseExpr):
         return dot_list
 
 class Identifier(BaseExpr):
+    "Class for storing the Variable Identifier"
     def __init__(self, name: str):
         super().__init__("Identifier")
         self.name = name
         self.get_type()
     
     def gen(self):
-        self.place = self.name # resolved using symtable during code generation
+        if self.expr_type.is_struct_type():
+            # store starting addr of struct
+            self.place = tac.newtmp()
+            symtable.add_var(self.place, VarType(1, self.expr_type._type))
+            tac.emit(f"{self.place} = & {self.name}")
+        else:
+            self.place = self.name # resolved using symtable during code generation
+
         if getattr(self, 'bool', False):
             self.truelist = [tac.nextquad()]
-            self.falselist = [tac.nextquad() + 1]
             tac.emit(f"ifnz {self.place} goto ")
+            self.falselist = [tac.nextquad()]
             tac.emit(f"goto ")
 
     def get_type(self):
         _var = symtable.lookup_var(self.name)
         if _var is None:
-            _var = symtable.lookup_func(self.name)
-            if _var is None:
-                _var = symtable.lookup_struct(self.name)
-                if _var is None:
-                    compilation_err.append('Undeclared Variable {}'.format(self.name))
-                    parser.error = compilation_err[-1]
-                    parser_error()
-                else:
-                    self.expr_type = _var
-            else:
-                self.expr_type = _var
+            parser_error(f'Undeclared Variable {self.name}')
         else:
             self.expr_type = _var
         # print(self.name, self.expr_type)
@@ -478,9 +502,7 @@ class OpExpr(BaseExpr):
             self.lhs.expr_type._type not in self.ops_type[self.ops] and
             self.rhs.expr_type._type not in self.ops_type[self.ops]
         ):
-            compilation_err.append('Type not compatible with ops {}'.format(self.ops))
-            parser.error = compilation_err[-1]
-            parser_error()
+            parser_error(f'Invalid operands to ops {self.ops} (have `{self.lhs.expr_type}` and `{self.rhs.expr_type}`)')
 
         if self.ops in ['>', '>=', '<', '<=']:
             if self.lhs.expr_type.get_caste_type(self.rhs.expr_type):
@@ -574,7 +596,12 @@ class UnaryExpr(OpExpr):
 
     def gen(self):
         self.place = tac.newtmp()
-        symtable.add_var(self.place, self.expr_type)
+        
+        if self.expr_type.is_struct_type():
+            # value of struct in 3ac == addr of starting position of struct
+            symtable.add_var(self.place, VarType(1, self.expr_type._type))
+        else:
+            symtable.add_var(self.place, self.expr_type)
 
         if self.ops == 'sizeof':
             tac.emit(f"{self.place} = {self.rhs.get_size()}")
@@ -596,7 +623,15 @@ class UnaryExpr(OpExpr):
             if self.ops == '-':
                 # TODO: in semantics, negation of pointer is syntax error
                 self.ops = self.expr_type.basic_type() + self.ops
-            tac.emit("{} = {} {}".format(self.place, self.ops, self.rhs.place))
+            
+            if self.rhs.expr_type.is_struct_type() and self.ops == '&':
+                # address of struct == addr of starting position of struct
+                tac.emit(f"{self.place} = {self.rhs.place}")
+            elif self.expr_type.is_struct_type() and self.ops == '*':
+                # value of struct == addr of starting position of struct == address of struct
+                tac.emit(f"{self.place} = {self.rhs.place}")
+            else:
+                tac.emit("{} = {} {}".format(self.place, self.ops, self.rhs.place))
         elif self.ops == '+':
             self.rhs.gen()
             tac.backpatch(getattr(self.rhs, 'nextlist', []), tac.nextquad())
@@ -683,21 +718,28 @@ class PostfixExpr(OpExpr):
         self.ops_type['--'] = ['int', 'char', 'float']
         super().__init__(lhs, ops, rhs)
 
-    def gen(self):
-        self.place = tac.newtmp()
-        symtable.add_var(self.place, self.expr_type)
+    def gen(self, is_lhs=False):
+        self.place = '#'
+        # populate self.place when it is not void
+        if self.expr_type != VarType(0, 'void'):
+            self.place = tac.newtmp()
+            if self.expr_type.is_struct_type() or is_lhs:
+                # tac variables of struct points to the starting of struct
+                symtable.add_var(self.place, VarType(1 + self.expr_type.ref_count, self.expr_type._type))
+            else:
+                symtable.add_var(self.place, self.expr_type)
 
         if self.ops == '++':
             self.lhs.gen()
             tac.backpatch(getattr(self.lhs, 'nextlist', []), tac.nextquad())
             
-            tac.emit(f"{self.lhs.place} = {self.lhs.place} int+ 1")
+            tac.emit(f"{self.lhs.place} = {self.lhs.place} int+ $1")
             tac.emit(f"{self.place} = {self.lhs.place}")
         elif self.ops == '--':
             self.lhs.gen()
             tac.backpatch(getattr(self.lhs, 'nextlist', []), tac.nextquad())
             
-            tac.emit(f"{self.lhs.place} = {self.lhs.place} int- 1")
+            tac.emit(f"{self.lhs.place} = {self.lhs.place} int- $1")
             tac.emit(f"{self.place} = {self.lhs.place}")
         elif self.ops == '[':
             self.lhs.gen()
@@ -708,23 +750,65 @@ class PostfixExpr(OpExpr):
             
             tac.emit(f"{self.place} = {self.lhs.place} [ {self.rhs.place} ]")
         elif self.ops == '(':
-            if self.rhs == None:
-                self.lhs.gen()
-                tac.emit(f"call {self.lhs.place}")
+            # stdio function (special as it contain variable number of args)
+            if self.lhs.name in ['printf', 'scanf']:
+
+                # generate code for parameters other than first one
+                for param in self.rhs[1:]:
+                    param.gen()
+                    tac.backpatch(getattr(param, 'nextlist', []), tac.nextquad())
+
+                args_size = 0
+
+                # push parameters other than the first one
+                for param in reversed(self.rhs[1:]):
+                    args_size += param.expr_type.get_size()
+                    tac.emit(f"param {param.place}")
+
+                # add 4bytes for fmt_string
+                args_size += 4
+                fmt_sym = tac.fmt_string()
+                symtable.add_fmt(fmt_sym, self.rhs[0].const)
+                tac.emit(f'param ${fmt_sym}')
+
+                # call the function
+                tac.emit(f"{self.lhs.name} {args_size} {self.place}")
+            
+            # standard function call
             else:
-                self.lhs.gen()
+                args = [] if self.rhs is None else self.rhs
 
                 # generate code for parameters
-                for param in self.rhs:
+                for param in args:
                     param.gen()
                     tac.backpatch(getattr(param, 'nextlist', []), tac.nextquad())
 
                 # push parameters 
-                for param in reversed(self.rhs):
+                for param in reversed(args):
                     tac.emit(f"param {param.place}")
 
                 # call the function
-                tac.emit(f"call {self.lhs.place}")
+                tac.emit(f"call {self.lhs.name} {self.place}")
+        elif self.ops in ['.', '->']:
+            self.lhs.gen()
+            tac.backpatch(getattr(self.lhs, 'nextlist', []), tac.nextquad())
+
+            offset = self.lhs.expr_type._type.get_offset(self.rhs)
+            
+            var_type = self.lhs.expr_type._type.variables[self.rhs]
+
+            if var_type.is_struct_type():
+                # store only addr of struct
+                tac.emit(f"{self.place} = {self.lhs.place} int+ ${offset}")
+            else:
+                if is_lhs:
+                    tac.emit(f"{self.place} = {self.lhs.place} int+ ${offset}")
+                else:
+                    var_addr = tac.newtmp()
+                    symtable.add_var(var_addr, VarType(1, var_type._type))
+
+                    tac.emit(f"{var_addr} = {self.lhs.place} int+ ${offset}")
+                    tac.emit(f"{self.place} = * {var_addr}")
 
     def get_type(self):
         
@@ -791,25 +875,36 @@ class PostfixExpr(OpExpr):
         elif self.ops == '(':
             arg_list = [] if self.rhs is None else self.rhs
             # sanity checking of function args and 
-            if isinstance(self.lhs.expr_type, Function):
-                func = self.lhs.expr_type
+
+            _var = symtable.lookup_func(self.lhs)
+            if isinstance(_var, Function):
+                func = self.lhs = _var
                 if func is None:
                     compilation_err.append('{} is not callable'.format(self.lhs))
                     parser.error = compilation_err[-1]
                     parser_error()
 
-                if len(arg_list) == len(func.args):
+                if func.name in ['printf', 'scanf']:
+                    if len(arg_list) < 1:
+                        parser_error('too few/many arguments to function {}'.format(func.name))
+                    # check if first arg is list
+                    elif isinstance(arg_list[0], Const) and arg_list[0].expr_type == VarType(1, 'char'):
+                        inferred_type = func.ret_type._type
+                        ref_count = func.ret_type.ref_count
+                    else:
+                        parser_error(f'expected string as first arguments to function {func.name}')
+                elif len(arg_list) == len(func.args):
                     inferred_type = func.ret_type._type
                     ref_count = func.ret_type.ref_count
+                    # TODO: add argument checking logic and typecasting it!
                 else:
                     compilation_err.append('too few/many arguments to function {}'.format(func.name))
                     parser.error = compilation_err[-1]
                     parser_error()
             else:
-                compilation_err.append('called object is not a function or function pointer')
-                parser.error = compilation_err[-1]
-                parser_error()
-            
+                parser_error(f'called object {self.lhs} is not a function')
+
+
         # array reference
         elif self.ops == '[':
             if self.rhs.expr_type == VarType(0, 'int'):
@@ -911,7 +1006,7 @@ class AssignExpr(OpExpr):
             self.rhs.gen()
             tac.backpatch(getattr(self.rhs, 'nextlist', []), tac.nextquad())
             
-            tac.emit(f"*{self.lhs.rhs.place} = {self.rhs.place}")
+            tac.emit(f"* {self.lhs.rhs.place} = {self.rhs.place}")
         elif isinstance(self.lhs, PostfixExpr) and self.lhs.ops == '[':
             self.lhs.lhs.gen()
             tac.backpatch(getattr(self.lhs.lhs, 'nextlist', []), tac.nextquad())
@@ -923,6 +1018,16 @@ class AssignExpr(OpExpr):
             tac.backpatch(getattr(self.rhs, 'nextlist', []), tac.nextquad())
             
             tac.emit(f"{self.lhs.lhs.place} [ {self.lhs.rhs.place} ] = {self.rhs.place}")
+        elif isinstance(self.lhs, PostfixExpr) and self.lhs.ops in ['.', '->']:
+            # we need self.lhs as lhs of '=' => it should be addr of some memory location which 
+            # '=' will update
+            self.lhs.gen(is_lhs=True)
+            tac.backpatch(getattr(self.lhs, 'nextlist', []), tac.nextquad())
+
+            self.rhs.gen()
+            tac.backpatch(getattr(self.rhs, 'nextlist', []), tac.nextquad())
+
+            tac.emit(f"* {self.lhs.place} = {self.rhs.place}")
         else:
             self.lhs.gen()
             tac.backpatch(getattr(self.lhs, 'nextlist', []), tac.nextquad())
@@ -1294,7 +1399,11 @@ class Declaration(_BaseDecl):
         for idx, init in enumerate(self.init_list):
             init.gen()
             tac.backpatch(getattr(init, 'nextlist', []), tac.nextquad())
-        self.nextlist = getattr(self.init_list[-1], 'nextlist', [])
+        
+        if len(self.init_list) > 0:
+            self.nextlist = getattr(self.init_list[-1], 'nextlist', [])
+        else:
+            self.nextlist = []
     
 
     @staticmethod
@@ -1339,6 +1448,7 @@ class LabeledStmt(Statement):
         self.stmt.gen()
         self.breaklist = getattr(self.stmt, 'breaklist', [])
         self.nextlist = getattr(self.stmt, 'nextlist', [])
+        self.returnlist = getattr(self.stmt, 'returnlist', [])
 
 class CompoundStmt(Statement):
     def __init__(
@@ -1359,6 +1469,7 @@ class CompoundStmt(Statement):
         
         self.breaklist = []
         self.continuelist = []
+        self.returnlist = []
 
         if self.stmt_list:
             for idx, stmt in enumerate(self.stmt_list):
@@ -1367,6 +1478,7 @@ class CompoundStmt(Statement):
 
                 self.breaklist += getattr(stmt, 'breaklist', [])
                 self.continuelist += getattr(stmt, 'continuelist', [])
+                self.returnlist += getattr(stmt, 'returnlist', [])
 
             if self.stmt_list == []:
                 self.nextlist = []
@@ -1429,6 +1541,7 @@ class SelectionStmt(Statement):
                 self.else_stmt.gen()
 
                 self.nextlist += getattr(self.if_stmt, 'nextlist', []) + getattr(self.else_stmt, 'nextlist', [])
+                self.returnlist += getattr(self.if_stmt, 'returnlist', []) + getattr(self.else_stmt, 'returnlist', [])
             # if statement
             else:
                 self.select_expr.bool = True
@@ -1439,6 +1552,7 @@ class SelectionStmt(Statement):
                 self.if_stmt.gen()
 
                 self.nextlist = getattr(self.if_stmt, 'nextlist', []) + getattr(self.select_expr, 'falselist', [])
+                self.returnlist = getattr(self.if_stmt, 'returnlist', []) + getattr(self.select_expr, 'returnlist', [])
         # switch
         else:
             self.select_expr.gen()
@@ -1453,6 +1567,7 @@ class SelectionStmt(Statement):
             case_labels = []
             case_labels.append(tac.nextquad())
             self.breaklist = []
+            self.returnlist = []
 
             for idx, case_stmt in enumerate(case_stmts):
                 case_stmt.breaklabel = self.nextlist
@@ -1466,6 +1581,7 @@ class SelectionStmt(Statement):
                     tac.emit(f'goto ')
                     
                 self.breaklist += getattr(case_stmt, 'breaklist', [])
+                self.returnlist += getattr(case_stmt, 'returnlist', [])
 
                 case_list.append(case_stmt.case)
             
@@ -1539,6 +1655,10 @@ class IterStmt(Statement):
 
                 tac.emit(f'goto {begin}')
 
+        # return list 
+        self.returnlist = getattr(self.stmt, 'returnlist', [])
+            
+
 class JumpStmt(Statement):
     def __init__(self, jump_type, expr=None):
         super().__init__("Jump Statement")
@@ -1550,7 +1670,13 @@ class JumpStmt(Statement):
         elif self.jump_type == 'continue':
             if not symtable.check_continue_scope():
                 parser_error('`continue` statement not within a loop')
-    
+        # elif self.jump_type == 'return':
+        #     if self.expr.expr_type != (function_type):
+        #         parser_error('')
+        # # check the return type with function scope
+        # i
+
+
     def gen(self):
         if self.jump_type == 'continue':
             self.continuelist = [tac.nextquad()]
@@ -1562,7 +1688,14 @@ class JumpStmt(Statement):
             if self.expr:
                 self.expr.gen()
                 tac.backpatch(getattr(self.expr, 'nextlist', []), tac.nextquad())
-            tac.emit(f'return')
+            
+            # only generate return stmt when there is expr to return
+            if self.expr is not None:
+                tac.emit(f'return {self.expr.place}')
+            
+            self.returnlist = [tac.nextquad()]
+            # in all return stmt, goto the end of function for call seq cleanup
+            tac.emit(f'goto ')
 
 
 # #############################################################################
@@ -1688,9 +1821,13 @@ class FuncDef(Node):
         symtable.add_func(Function(self.vartype, self.name, self.param_list, is_declared=True))
 
     def gen(self):
-        tac.emit(f'func {self.name}')
+        tac.push_func_code()
+        tac.emit(f'FuncBegin {self.name}')
         self.stmt.gen()
         self.nextlist = getattr(self.stmt, 'nextlist', [])
+        tac.backpatch(getattr(self.stmt, 'returnlist', []), tac.nextquad())
+        tac.emit(f'FuncEnd {self.name}')
+
 
     @staticmethod
     def _gen_dot(obj):

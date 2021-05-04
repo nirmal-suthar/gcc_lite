@@ -3,12 +3,15 @@
 from ply import yacc
 
 def parser_error(error_str=None):
+    # subtracting stdlib offset for correct position info
+    stdlib_offset = len(stdlib.split('\n')) - 1
+
     parser.compilation_err = True
-    print(bcolors.BOLD+'{}:{}:'.format(lexer.filename,lexer.lineno)+bcolors.ENDC,end='')
+    print(bcolors.BOLD+f'{lexer.filename}:{lexer.lineno - stdlib_offset}:0'+bcolors.ENDC,end='')
     if error_str == None:
         error_str = parser.error
     print(bcolors.FAIL+' Error:'+bcolors.ENDC, error_str)
-    print('     {} |{}'.format(lexer.lineno,lexer.lines[lexer.lineno - 1]))
+    print('     {} |{}'.format(lexer.lineno - stdlib_offset,lexer.lines[lexer.lineno - 1]))
 
 
 class bcolors:
@@ -51,7 +54,9 @@ def p_push_scope(p):
         symtable.push_scope(p[-2].name)
     elif isinstance(p[-2], tuple):
         symtable.push_scope('Function')
-        _, _, _, args = p[-2]
+        _, _, func_name, args = p[-2]
+        func = symtable.lookup_func(func_name)
+        func.scope_id = len(symtable.all_scope)-1
         for name, _type in args:
             symtable.add_var(name, _type, is_param=True)
     else:
@@ -81,19 +86,22 @@ def p_switch_scope(p):
     p[0] = ScopeName('Switch')
 
 def p_error(p):
+    # subtracting stdlib offset for correct position info
+    stdlib_offset = len(stdlib.split('\n')) - 1
+
     position = (
         p.lexer.lexpos
         - sum(map(lambda line: len(line) + 1, p.lexer.lines[: p.lineno - 1]))
         - len(p.value)
         + 1
     )
-    print(bcolors.BOLD+'{}:{}:{}:'.format(p.lexer.filename,p.lineno, position)+bcolors.ENDC,end='')
-    print(bcolors.FAIL+' SyntaxError: '+bcolors.ENDC,'Unexpected token {}'.format(p.value))
-    print('     {} |{}'.format(p.lineno,p.lexer.lines[p.lineno - 1][:position-1]),end='')
+    print(f'{bcolors.BOLD}{p.lexer.filename}:{p.lineno - stdlib_offset}:{position}:{bcolors.ENDC}',end='')
+    print(f'{bcolors.FAIL} SyntaxError: {bcolors.ENDC}Unexpected token {p.value}')
+    print(f'     {p.lineno - stdlib_offset} |{p.lexer.lines[p.lineno - 1][:position-1]}',end='')
     print(bcolors.WARNING + bcolors.UNDERLINE + '{}'.format(
         p.lexer.lines[p.lineno - 1][position-1:position-1+len(p.value)]
         )+bcolors.ENDC+bcolors.ENDC,end='')
-    print('{}'.format(p.lexer.lines[p.lineno - 1][position-1+len(p.value):]))
+    print(f'{p.lexer.lines[p.lineno - 1][position-1+len(p.value):]}')
 
 
 # #############################################################################
@@ -151,8 +159,8 @@ def p_postfix_expression_arr(p):
     p[0] = PostfixExpr(p[1], '[', p[3])
 
 def p_postfix_expression_call(p):
-    ''' postfix_expression : postfix_expression '(' ')'
-            | postfix_expression '(' argument_expression_list ')'
+    ''' postfix_expression : IDENTIFIER '(' ')'
+            | IDENTIFIER '(' argument_expression_list ')'
     '''
     if len(p) == 4:
         p[0] = PostfixExpr(p[1], '(', None)
@@ -772,8 +780,12 @@ def p_function_definition(p):
     '''
     if len(p) == 5:
         p[0] = (p[1], 0, p[2], p[3])
+        vartype = VarType(0, p[1].type_spec)    
+        symtable.add_func(Function(vartype, p[2], p[3]))
     else:
         p[0] = (p[1], p[2], p[3], p[4])
+        vartype = VarType(p[1], p[2].type_spec)    
+        symtable.add_func(Function(vartype, p[3], p[4]))
 
 from lexer import lexer, tokens
 

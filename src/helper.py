@@ -2,6 +2,13 @@ import csv
 from parser import parser_error
 import re
 
+stdlib = '''
+int printf(char *s);
+int scanf(char *s);
+
+// TODO: add malloc, free and math function
+'''
+
 # def parser_error(error_str=None):
 #     parser.compilation_err = True
 #     print(bcolors.BOLD+'{}:{}:'.format(lexer.filename,lexer.lineno)+bcolors.ENDC,end='')
@@ -19,6 +26,7 @@ class ScopeTable:
         self.structs = {}               # for structs and union
         self.metadata = scope_type      # will include function, loop or ifelse
         self.size = 0
+        self.child_max_size = 0
         self.param_size = 0
 
 
@@ -46,15 +54,17 @@ class ScopeTable:
 
         elif self.metadata == 'Function':
             if is_param:
+
                 offset = self.param_size + 2*ADDR_SIZE + vtype.get_size() # 2 ADDR_SIZE for return addr and rbp
                 self.param_size += vtype.get_size()
             else:
                 offset = -(vtype.get_size() + self.size)
+                self.size = -offset
 
         else:
-            offset = -(self.parent.size + vtype.get_size())
-            self.parent.size += vtype.get_size()
-            self.size = self.parent.size
+            offset = -(self.parent.size + self.size + vtype.get_size())
+            self.size = self.size + vtype.get_size()
+            self.parent.child_max_size = max(self.parent.child_max_size, self.size)
 
         self.variables[name] = {'name': name, 'type': vtype, 'offset': offset, 'scope_id': self.scope_id}
     
@@ -76,8 +86,9 @@ class SymbolTable():
 
         self.scope_stack = [self.global_scope]
         self.tmp_cnt = 0 #for three address code temp variables
-        self.cur_idx = 0 # for changing scope while 3ac generation
-    
+        self.tac_scope_idx = 0 # for changing scope while 3ac generation
+        self.fmt_var = {} # stores the fmt strings used in printf, scanf
+
     def cur_depth(self):
         return len(self.scope_stack)
 
@@ -110,14 +121,17 @@ class SymbolTable():
 
     def push_scope(self, scope_type='Other', exists=False) -> None:
         if exists:
-            self.scope_stack.append(self.all_scope[self.cur_idx + 1])
-            self.cur_idx += 1
+            self.scope_stack.append(self.all_scope[self.tac_scope_idx + 1])
+            self.tac_scope_idx += 1
             return
         new_scope = ScopeTable(self.cur_depth(), self.scope_stack[-1], len(self.all_scope), scope_type)
         self.all_scope.append(new_scope)
         self.scope_stack.append(new_scope)
 
     def pop_scope(self) -> None:
+        scope = self.cur_scope() 
+        if scope.metadata != 'Global':
+            scope.parent.child_max_size = max(scope.parent.child_max_size, scope.size+scope.child_max_size)
         self.scope_stack.pop()
 
     def lookup_var(self, name):
@@ -192,8 +206,12 @@ class SymbolTable():
 
             parser_error('Redeclaration of function named {}'.format(func.name))
             return
-        func.scope_id = len(self.all_scope)-1
+
         self.function[func.name] = func
+
+    # for enabling printf and scanf
+    def add_fmt(self, label, fmt_str):
+        self.fmt_var[label] = fmt_str
 
     #this will give a temp for three address code
     def get_temp_for_ir(self):
@@ -283,15 +301,16 @@ class Instr:
             self.e2 = m.group('e2')
             self.e3 = m.group('e3')
 
-        elif m := re.fullmatch('call (?P<e1>[^ ]*)', code):
+        elif m := re.fullmatch('call (?P<e1>[^ ]*) (?P<e2>[^ ]*)', code):
             self.instr = 'call'
             self.e1 = m.group('e1')
+            self.e2 = m.group('e2')
 
         elif m := re.fullmatch('param (?P<e1>[^ ]*)', code):
             self.instr = 'push param'
             self.e1 = m.group('e1')
 
-        elif m := re.fullmatch('\*(?P<e2>[^ ]*) = (?P<e1>[^ ]*)', code):
+        elif m := re.fullmatch('\* (?P<e2>[^ ]*) = (?P<e1>[^ ]*)', code):
             self.instr = 'memory update'
             self.e1 = m.group('e1')
             self.e2 = m.group('e2')
@@ -308,12 +327,29 @@ class Instr:
             self.e2 = m.group('e2')
             self.label = m.group('label')
 
-        elif m := re.fullmatch('return', code):
+        elif m := re.fullmatch('return (?P<e1>[^ ]*)', code):
             self.instr = 'return'
-        
-        elif m := re.fullmatch('func (?P<e1>[^ ]*)', code):
-            self.instr = 'func'
             self.e1 = m.group('e1')
+        
+        elif m := re.fullmatch('FuncBegin (?P<e1>[^ ]*)', code):
+            self.instr = 'FuncBegin'
+            self.e1 = m.group('e1')
+        
+        elif m := re.fullmatch('FuncEnd (?P<e1>[^ ]*)', code):
+            self.instr = 'FuncEnd'
+            self.e1 = m.group('e1')
+
+        elif m := re.fullmatch('printf (?P<e1>[^ ]*) (?P<e2>[^ ]*)', code):
+            self.instr = 'printf'
+            self.e1 = m.group('e1')
+            self.e2 = m.group('e2')
+
+        elif m := re.fullmatch('scanf (?P<e1>[^ ]*) (?P<e2>[^ ]*)', code):
+            self.instr = 'scanf'
+            self.e1 = m.group('e1')
+            self.e2 = m.group('e2')
+        else:
+            raise Exception(f'regex not handled! {code}')
     
     def __str__(self):
         return self.code
@@ -324,6 +360,21 @@ class IRHelper:
         self.tmpCount = 0
         self.labelCount = 0
         self.code = []
+        self.func_code = None
+        self.fmtCount = 0
+
+    def fmt_string(self,):
+        label = f'FMT{self.fmtCount}'
+        self.fmtCount += 1
+        return label
+
+    def push_func_code(self):
+        self.code = []
+        if self.func_code is None:
+            self.func_code = [self.code]
+        else:
+            self.func_code.append(self.code)
+        self.tmpCount = 0
 
     def newtmp(self):
         #get a new symtable temporary, may put in symbol table
@@ -338,6 +389,7 @@ class IRHelper:
 
     def emit(self, code):
         self.code.append(Instr(code))
+        # print(len(self.code))
 
     def backpatch(self,st_list,target_label):
         #set the target label for the statements in the list
@@ -351,9 +403,10 @@ class IRHelper:
 
     def dump_code(self, filename):
         with open(filename, 'w') as f:
-            for idx, instr in enumerate(self.code):
-                f.write(str(idx) + "\t" + str(instr) + "\n")
-        # print(self.code)
+            for func in self.func_code:
+                for idx, instr in enumerate(func):
+                    f.write(str(idx) + "\t" + str(instr) + "\n")
+                f.write('\n')
 
 tac = IRHelper()
 

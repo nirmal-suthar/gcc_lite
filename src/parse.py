@@ -4,7 +4,7 @@ import sys, argparse, pydot
 from argparse import ArgumentParser
 # from parser import parser, lexer, symtable
 from parser import parser, lexer
-from helper import symtable, tac
+from helper import symtable, tac, stdlib
 from codegen import AssemblyGen
 
 
@@ -44,9 +44,10 @@ if __name__ == "__main__":
     png_file = args.out.split('.')[-2] + '.png'
 
     with open(args.input, 'r') as f:
-        ifile = f.read()
+        arg_file = f.read()
     
-
+    
+    ifile = stdlib + arg_file
     lexer.filename = args.input 
     lexer.lines = ifile.split("\n")
 
@@ -61,7 +62,7 @@ if __name__ == "__main__":
 
     tac.dump_code(args.out.split('.')[-2] + '.out')
 
-    asm = AssemblyGen(tac.code)
+    asm = AssemblyGen(tac.func_code)
     asm.gen_assembly()
     asm.dump_code(args.out.split('.')[-2] + '.s')
 

@@ -1,19 +1,25 @@
 from parser import symtable
+import re
+
+from parser_class import Function
 
 def binary(num):
     return ''.join('{:0>8b}'.format(c) for c in struct.pack('!f', num))
 
 class AssemblyGen:
-    def __init__(self, code):
-        self.code = code
-        self.reg_no = {'ebx':0,'ecx':1, 'esi':2,  'edi':3, 'eax':4, 'edx':5}
-        self.reg_name =  {value:key for key, value in reg_no.items()}
+    def __init__(self, func_code):
+        self.func_code = func_code
+        self.reg_no = {'ebx':0, 'ecx':1, 'esi':2, 'edi':3, 'eax':4, 'edx':5}
+        self.reg_name =  {value:key for key, value in self.reg_no.items()}
         self.num_reg = len(self.reg_no)
         self.tie_reg = 0 # register to be spilled if all registers are full
         self.reg_d = [None] * self.num_reg
         self.addr_d = {}
         self.assembly = []
-        self.code_idx = 0
+        self.cur_instr = None
+    
+    def code_idx(self):
+        return len(self.assembly)
     
     def add(self, instr):
         self.assembly.append(instr)
@@ -42,16 +48,20 @@ class AssemblyGen:
     def get_info(self, name):
         """ Get symbol table information related to name symbol """
 
-        return self.code[self.code_idx].scope.lookup_info(name)
+        return self.cur_instr.scope.lookup_info(name)
 
     def get_addr(self, name_info, displ=False):
         """ get memory address of name """
-        if isinstance(name_info, str):
+
+        if re.fullmatch('\$.*', name_info):
+            return name_info
+        elif isinstance(name_info, str):
             # if argument is name of symbol then get info from scope/symbol table
             name = name_info
             name_info = self.get_info(name_info)
             if name_info == None: # possibly constant value
-                return '$' + name
+                # return '$' + name
+                raise Exception(f'hii {name}')
 
         if name_info['scope_id'] == 0:
             # global variables are stored in .data section
@@ -107,21 +117,37 @@ class AssemblyGen:
         print("\textern fopen1")
         print("\textern fread2")
 
-        self.labels = []
-        for code in self.code:
-            if hasattr(code, 'label'):
-                self.labels.append(code.label)
-        
-        self.labels = {label: f"label{id}" for id, label in enumerate(self.labels)}
+        # add fmt string info
+        for (label, fmt_str) in symtable.fmt_var.items():
+            self.add(f'{label}:')
+            self.add (f'.string {fmt_str}')
 
-        for idx, code in enumerate(self.code):
-            self.code_idx = idx
-            if str(idx) in self.labels:
-                self.add(f'{self.labels[str(idx)]}:')
-            self.gen_instr(code)
-        if str(len(self.code)) in self.labels:
-            self.add(f'{self.labels[str(len(self.code))]}:')
-    
+        # start traversing the IR (one function at a time!)
+        for fidx, codes in enumerate(self.func_code):
+
+            # compute the labels info and store in relevant places
+            labels = []
+            for code in codes:
+                if hasattr(code, 'label'):
+                    labels.append(code.label)
+            
+            self.labels = {label: f"label_{fidx}_{id}" for id, label in enumerate(labels)}
+
+            for idx, code in enumerate(codes):
+                self.cur_instr = code
+
+                # if cur code is part of new label => create it
+                if str(idx) in self.labels:
+                    self.add(f'{self.labels[str(idx)]}:')
+                
+                self.add(f'// {code}')
+                # gen it!
+                self.gen_instr(code)
+
+            # FIXME: don't know what it is for
+            if str(len(codes)) in self.labels:
+                self.add(f'{self.labels[str(len(codes))]}:')
+        
     def gen_instr(self, code):
         """ generate x86 from 3AC instr """
         if code.instr == 'ifnz':
@@ -162,12 +188,48 @@ class AssemblyGen:
             else:
                 self.add(f'{instr} {displ}(%ebp , {self.get_symbol(code.e2, reg=True)}, {self.get_info(code.e1)["type"].get_ref_size()}), {r}')
 
-
         elif code.instr == 'call':
+
+            self.spillreg(self.reg_no['eax'])
+
             # assuming label for the function is same as name of the function
             self.add(f'call {code.e1}')
 
-            # TODO: unallocate parameters which are pushed by `add {size} %esp` instruction
+            FuncType = symtable.lookup_func(code.e1)
+            if FuncType is None:
+                raise Exception(f'functype is none {code.e1}')
+
+            self.add(f'add ${FuncType.param_size()}, %esp')
+
+            if code.e2 != '#':
+                self.reg_d[self.reg_no['eax']] = code.e2
+                self.addr_d[code.e2] = self.reg_no['eax']
+
+        elif code.instr == 'printf':
+
+            self.spillreg(self.reg_no['eax'])
+
+            # assuming label for the function is same as name of the function
+            self.add(f'call printf')
+
+            self.add(f'add ${code.e1}, %esp')
+
+            if code.e2 != '#':
+                self.reg_d[self.reg_no['eax']] = code.e2
+                self.addr_d[code.e2] = self.reg_no['eax']
+        
+        elif code.instr == 'scanf':
+
+            self.spillreg(self.reg_no['eax'])
+
+            # assuming label for the function is same as name of the function
+            self.add(f'call scanf')
+
+            self.add(f'add ${code.e1}, %esp')
+
+            if code.e2 != '#':
+                self.reg_d[self.reg_no['eax']] = code.e2
+                self.addr_d[code.e2] = self.reg_no['eax']
 
         elif code.instr == 'push param':
             self.add(f'push {self.get_symbol(code.e1)}')
@@ -202,7 +264,7 @@ class AssemblyGen:
                 r1 = self.get_symbol(code.e1)
             else:
                 # at least one register required for cmp
-                r = getreg()
+                r = self.getreg()
                 self.loadreg(r, code.e1)
                 r1 = '%' + self.reg_name[r]
                 r2 = self.get_symbol(code.e2)
@@ -211,15 +273,35 @@ class AssemblyGen:
             self.add(f'je {self.labels[code.label]}')
 
         elif code.instr == 'return':
-            self.add('pop %ebp')
-            self.add('ret')
-        
-        elif code.instr == 'func':
+            
+            self.spillreg(self.reg_no['eax'])
+            self.loadreg(self.reg_no['eax'], code.e1)
+            
+        elif code.instr == 'FuncBegin':
             self.add(f'{code.e1}:')
             self.add(f'push %ebp')
             self.add(f'mov %esp, %ebp')
             func = symtable.lookup_func(code.e1)
-            self.add(f'sub ${hex(symtable.all_scope[func.scope_id].size)}, %esp')
+            scope = symtable.all_scope[func.scope_id]
+            self.add(f'sub ${hex(scope.size + scope.child_max_size)}, %esp')
+            self.add(f'push %ebx')
+            self.add(f'push %ecx')
+            self.add(f'push %edx')
+            self.add(f'push %esi')
+            self.add(f'push %edi')
+            
+        elif code.instr == 'FuncEnd':
+            self.add(f'pop %ebx')
+            self.add(f'pop %ecx')
+            self.add(f'pop %edx')
+            self.add(f'pop %esi')
+            self.add(f'pop %edi')
+            self.add(f'mov %ebp, %esp')
+            self.add(f'pop %ebp')
+            self.add(f'ret ')  
+        else:
+            raise Exception(f'Invalid code instr = {code.instr}')
+
 
     def unary_op_assembly(self, code):
         if code.op == '&':
@@ -534,9 +616,9 @@ class AssemblyGen:
         with open(filename, 'w') as f:
             for idx, instr in enumerate(self.assembly):
                 if instr[-1] == ':':
-                    f.write("\t" + instr + "\n")
+                    f.write("" + instr + "\n")
                 else:
-                    f.write("\t\t" + instr + "\n")
+                    f.write("\t" + instr + "\n")
 
 
 
