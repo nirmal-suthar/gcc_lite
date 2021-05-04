@@ -35,19 +35,21 @@ class AssemblyGen:
         self.tie_reg = (reg + 1)%self.num_reg
         return reg
     
-    def spillreg(self, reg):
+    def spillreg(self, reg, need=True):
         if self.reg_d[reg] != None:
-            self.add(f"mov %{self.reg_name[reg]}, {self.get_addr(self.reg_d[reg])}")
-            self.addr_d.pop(self.reg_d[reg])
+            if need:
+                self.add(f"mov %{self.reg_name[reg]}, {self.get_addr(self.reg_d[reg])}")
+                # TODO: dev can addr_d be scope dependent?
+                self.addr_d.pop(self.reg_d[reg])
             self.reg_d[reg] = None
     
-    def spillallregs(self):
+    def spillallregs(self, need=True): #need implies if we may need to store or just empty it
         for reg in range(self.num_reg):
-            self.spillreg(reg)
+            self.spillreg(reg, need)
     
     def get_info(self, name):
         """ Get symbol table information related to name symbol """
-
+        # print(f'{self.cur_instr}, {self.cur_instr.scope.scope_id}, {self.cur_instr.scope.lookup_info(name)}, {name}')
         return self.cur_instr.scope.lookup_info(name)
 
     def get_addr(self, name_info, displ=False):
@@ -147,6 +149,8 @@ class AssemblyGen:
             # FIXME: don't know what it is for
             if str(len(codes)) in self.labels:
                 self.add(f'{self.labels[str(len(codes))]}:')
+            
+            self.spillallregs(need=False)
         
     def gen_instr(self, code):
         """ generate x86 from 3AC instr """
@@ -291,11 +295,11 @@ class AssemblyGen:
             self.add(f'push %edi')
             
         elif code.instr == 'FuncEnd':
-            self.add(f'pop %ebx')
-            self.add(f'pop %ecx')
-            self.add(f'pop %edx')
-            self.add(f'pop %esi')
             self.add(f'pop %edi')
+            self.add(f'pop %esi')
+            self.add(f'pop %edx')
+            self.add(f'pop %ecx')
+            self.add(f'pop %ebx')
             self.add(f'mov %ebp, %esp')
             self.add(f'pop %ebp')
             self.add(f'ret ')  

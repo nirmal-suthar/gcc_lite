@@ -8,8 +8,10 @@ from collections import OrderedDict
 
 ADDR_SIZE = 4
 INT_SIZE = 4
-CHAR_SIZE = 4
+CHAR_SIZE = 1
 FLOAT_SIZE = 4
+ALIGN_SHIFT = 2 # all offset should be 2^2 = 4 bytes aligned (32 bit machine)
+ALIGN_BYTES = 4
 
 # #############################################################################
 # Misc.            
@@ -152,7 +154,12 @@ class VarType(_BASENODE):
         self._type = _type
         self.arr_offset = arr_offset
 
-    def get_size(self):
+    def get_size(self) -> int:
+        _size = self._get_size()
+        aligned_size = ((_size+ALIGN_BYTES-1)>>ALIGN_SHIFT)<<ALIGN_SHIFT 
+        return aligned_size
+
+    def _get_size(self) -> int:
         if self.ref_count > 0:
             if self.arr_offset is None:
                 return ADDR_SIZE
