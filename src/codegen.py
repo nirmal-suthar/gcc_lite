@@ -27,6 +27,7 @@ class AssemblyGen:
     def getreg(self):
         for i in range(self.num_reg):
             if self.reg_d[i] is None:
+                self.tie_reg = (i + 1)%self.num_reg
                 return i
         
         # all registers are full
@@ -174,19 +175,20 @@ class AssemblyGen:
             # mov e1[e2], e3
             # e1[e2] is memory so e3 is required to be in register
 
-            r = self.get_symbol(code.e3, reg=True)
+            r3 = self.get_symbol(code.e3, reg=True)
 
-            displ = self.get_addr(code.e1, displ=True) # need only offset/displacement of e1 not entier address
+            # displ = self.get_addr(code.e1, displ=True) # need only offset/displacement of e1 not entier address
+            r1 = self.get_symbol(code.e1, reg=True) # need only offset/displacement of e1 not entier address
             if self.get_info(code.e3)['type'].is_array():
                 instr = 'lea'
             else:
                 instr = 'mov'
 
-            if displ[0] == '$':
-                # e1 is global
-                self.add(f'{instr} {displ}(, {self.get_symbol(code.e2, reg=True)}, {self.get_info(code.e1)["type"].get_ref_size()}), {r}')
-            else:
-                self.add(f'{instr} {displ}(%ebp , {self.get_symbol(code.e2, reg=True)}, {self.get_info(code.e1)["type"].get_ref_size()}), {r}')
+            # if displ[0] == '$':
+            #     # e1 is global
+            #     self.add(f'{instr} ({r1}, {self.get_symbol(code.e2, reg=True)}, {self.get_info(code.e1)["type"].get_ref_size()}), {r}')
+            # else:
+            self.add(f'{instr} ({r1} , {self.get_symbol(code.e2, reg=True)}, 1), {r3}')
 
         elif code.instr == 'call':
 
@@ -243,17 +245,20 @@ class AssemblyGen:
 
         elif code.instr == 'array update':
 
-            # mov e1, e2[e3]
-            # e2[e3] is memory location so e1 is required to be in register
+            # mov e1, e3[e2]
+            # e3[e2] is memory location so e1 is required to be in register
             
-            r = self.get_symbol(code.e1, reg=True)
+            r1 = self.get_symbol(code.e1, reg=True)
 
-            displ = self.get_addr(code.e3, displ=True) # need only offset/displacement of e3 not entier address
-            if displ[0] == '$':
-                # e3 is global
-                self.add(f'mov {r}, {displ}(, {self.get_symbol(code.e2, reg=True)}, {self.get_info(code.e3)["type"].get_ref_size()})')
-            else:
-                self.add(f'mov {r}, {displ}(%ebp , {self.get_symbol(code.e2, reg=True)}, {self.get_info(code.e3)["type"].get_ref_size()})')
+            # displ = self.get_addr(code.e3, displ=True) # need only offset/displacement of e3 not entier address
+            r3 = self.get_addr(code.e3, displ=True) # need only offset/displacement of e3 not entier address
+            # if displ[0] == '$':
+            #     # e3 is global
+            #     self.add(f'mov {r}, {displ}(, {self.get_symbol(code.e2, reg=True)}, {self.get_info(code.e3)["type"].get_ref_size()})')
+            # else:
+            r2 = self.get_symbol(code.e2, reg=True)
+            self.add(f'mul ')
+            self.add(f'mov {r1}, ({r3} , {self.get_symbol(code.e2, reg=True)}, 1)')
 
         elif code.instr == 'ifeq':
             if code.e1 in self.addr_d:
@@ -311,7 +316,7 @@ class AssemblyGen:
         elif code.op == '*':
             # mov (e1), e2
             # e2 requires to be in register
-            self.add(f'mov {self.get_addr(code.e1)}, {self.get_symbol(code.e2, reg=True)}')
+            self.add(f'mov ({self.get_symbol(code.e1, reg=True)}), {self.get_symbol(code.e2, reg=True)}')
         elif code.op == '~':
             # not e1
             r = self.get_symbol(code.e2, reg=True)

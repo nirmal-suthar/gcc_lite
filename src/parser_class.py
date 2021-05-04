@@ -125,6 +125,14 @@ class StructType(_BASENODE):
     def get_offset(self, name):
         return self.offsets[name]
     
+    def get_first_element_type(self):
+        # returns type of first element in struct
+        name, vartype = next(iter(self.variables.items()))
+        return vartype
+    
+    def get_element_type(self, name):
+        return self.variables[name]
+    
     def _get_size(self):
         raise Exception('TODO')
 
@@ -151,18 +159,22 @@ class VarType(_BASENODE):
         self.ref_count = ref_count
         self._type = _type
         self.arr_offset = arr_offset
+        self.is_tmp = False
 
     def get_size(self):
+        # different size for tmp variables, e.g. t#1 of type struct will require only ADDR_SIZE bytes to store addr of struct
         if self.ref_count > 0:
-            if self.arr_offset is None:
+            if self.arr_offset is None or self.arr_offset == []:
                 return ADDR_SIZE
             else:
-                size = 1
-                for x in self.arr_offset:
-                    size *= int(x.const)
+                if self.is_tmp:
+                    return ADDR_SIZE
+                size = self.get_ref_size() * int(self.arr_offset[0].const)
                 return size
         else:
             if isinstance(self._type, StructType):
+                if self.is_tmp:
+                    return ADDR_SIZE
                 return self._type.get_size()
             elif self._type == 'int':
                 return INT_SIZE
@@ -176,18 +188,36 @@ class VarType(_BASENODE):
                 raise Exception(f'Invalid type {self._type}')
 
     def get_ref_size(self):
-        return VarType(self.ref_count - 1, self._type).get_size()
+        if not self.is_array():
+            return VarType(self.ref_count - 1, self._type).get_size()
+        else:
+            return self.get_array_element_type().get_size()
 
     def is_pointer(self):
         return self.ref_count > 0
     
     def is_array(self):
+        if self.arr_offset is None:
+            return False
         return len(self.arr_offset) > 0
+    
+    def get_array_len(self):
+        assert(self.is_array())
+        return int(self.arr_offset[0].const)
+
+    def get_array_element_type(self):
+        assert(self.is_array())
+        # return type of element after applying array access operator
+        if len(self.arr_offset) > 1:
+            return VarType(self.ref_count, self._type, self.arr_offset[1:])
+        else:
+            return VarType(self.ref_count-1, self._type, self.arr_offset[1:])
 
     def basic_type(self):
         return self._type
     
     def is_struct_type(self):
+        # print(not self.is_pointer(), type(self._type))
         return (not self.is_pointer()) and isinstance(self._type, StructType)
 
     def castable_to(self, other):
@@ -232,6 +262,7 @@ class VarType(_BASENODE):
             return None
 
     def __str__(self):
+        # add representation of array with offsets
         if isinstance(self._type, str):
             type_string = self._type
         else:
@@ -380,10 +411,10 @@ class Identifier(BaseExpr):
         self.get_type()
     
     def gen(self):
-        if self.expr_type.is_struct_type():
-            # store starting addr of struct
+        if self.expr_type.is_struct_type() or self.expr_type.is_array():
+            # store starting addr of struct/array
             self.place = tac.newtmp()
-            symtable.add_var(self.place, VarType(1, self.expr_type._type))
+            symtable.add_var(self.place, self.expr_type)
             tac.emit(f"{self.place} = & {self.name}")
         else:
             self.place = self.name # resolved using symtable during code generation
@@ -460,12 +491,12 @@ class OpExpr(BaseExpr):
             if self.lhs.expr_type.is_pointer() and not self.rhs.expr_type.is_pointer():
                 tmpvar = tac.newtmp()
                 symtable.add_var(tmpvar, self.rhs.expr_type)
-                tac.emit(f"{tmpvar} = {self.rhs.place} int* {self.lhs.expr_type.get_ref_size()}")
+                tac.emit(f"{tmpvar} = {self.rhs.place} int* ${self.lhs.expr_type.get_ref_size()}")
                 tac.emit(f"{self.place} = {self.lhs.place} {operator} {tmpvar}")
             elif not self.lhs.expr_type.is_pointer() and self.rhs.expr_type.is_pointer():
                 tmpvar = tac.newtmp()
                 symtable.add_var(tmpvar, self.lhs.expr_type)
-                tac.emit(f"{tmpvar} = {self.lhs.place} int* {self.rhs.expr_type.get_ref_size()}")
+                tac.emit(f"{tmpvar} = {self.lhs.place} int* ${self.rhs.expr_type.get_ref_size()}")
                 tac.emit(f"{self.place} = {tmpvar} {operator} {self.rhs.place}")
             elif self.lhs.expr_type.is_pointer():
                 tmpvar = tac.newtmp()
@@ -594,14 +625,14 @@ class UnaryExpr(OpExpr):
         super().__init__(None, ops, rhs)
         self.get_type()
 
-    def gen(self):
+    def gen(self, is_lhs=False):
         self.place = tac.newtmp()
         
-        if self.expr_type.is_struct_type():
-            # value of struct in 3ac == addr of starting position of struct
-            symtable.add_var(self.place, VarType(1, self.expr_type._type))
-        else:
-            symtable.add_var(self.place, self.expr_type)
+        # if self.expr_type.is_struct_type():
+        #     # value of struct in 3ac == addr of starting position of struct
+        #     symtable.add_var(self.place, VarType(1, self.expr_type._type))
+        # else:
+        symtable.add_var(self.place, self.expr_type)
 
         if self.ops == 'sizeof':
             tac.emit(f"{self.place} = {self.rhs.get_size()}")
@@ -618,6 +649,15 @@ class UnaryExpr(OpExpr):
             tac.emit(f"{self.place} = {self.rhs.place}")
             tac.emit(f"{self.rhs.place} = {self.rhs.place} - 1")
         elif self.ops in ['&', '*', '-', '~']:
+            if self.ops == '&' and (not isinstance(self.rhs, Identifier)):
+                if isinstance(self.rhs, PostfixExpr):
+                    self.rhs.gen(is_lhs=True)
+                elif isinstance(self.rhs, UnaryExpr):
+                    self.rhs.gen(is_lhs=True)
+                else:
+                    raise Exception("Invalid class {}", type(self.rhs))
+                tac.emit(f"{self.place} = {self.rhs.place}")
+                return
             self.rhs.gen()
             tac.backpatch(getattr(self.rhs, 'nextlist', []), tac.nextquad())
             if self.ops == '-':
@@ -631,7 +671,10 @@ class UnaryExpr(OpExpr):
                 # value of struct == addr of starting position of struct == address of struct
                 tac.emit(f"{self.place} = {self.rhs.place}")
             else:
-                tac.emit("{} = {} {}".format(self.place, self.ops, self.rhs.place))
+                if is_lhs and self.ops == '*':
+                    tac.emit(f"{self.place} = {self.rhs.place}")
+                else:
+                    tac.emit("{} = {} {}".format(self.place, self.ops, self.rhs.place))
         elif self.ops == '+':
             self.rhs.gen()
             tac.backpatch(getattr(self.rhs, 'nextlist', []), tac.nextquad())
@@ -702,8 +745,10 @@ class UnaryExpr(OpExpr):
                 parser.error = compilation_err[-1]
                 parser_error()
         elif self.ops == '&':
-            if not isinstance(self.rhs, Identifier):
-                compilation_err.append('RHS should be an indentifier')
+            if not isinstance(self.rhs, Identifier) and \
+                (not (isinstance(self.rhs, PostfixExpr) and self.rhs.ops in ['.', '->'])) and \
+                (not (isinstance(self.rhs, UnaryExpr) and self.rhs.ops in ['*'])):
+                compilation_err.append('RHS should be an indentifier / postfix . or -> / unary *')
                 parser.error = compilation_err[-1]
                 parser_error()
             else:
@@ -723,9 +768,10 @@ class PostfixExpr(OpExpr):
         # populate self.place when it is not void
         if self.expr_type != VarType(0, 'void'):
             self.place = tac.newtmp()
-            if self.expr_type.is_struct_type() or is_lhs:
+            # if self.expr_type.is_struct_type() or is_lhs:
                 # tac variables of struct points to the starting of struct
-                symtable.add_var(self.place, VarType(1 + self.expr_type.ref_count, self.expr_type._type))
+            if is_lhs:
+                symtable.add_var(self.place, VarType(1 + self.expr_type.ref_count, self.expr_type._type, self.expr_type.arr_offset))
             else:
                 symtable.add_var(self.place, self.expr_type)
 
@@ -748,7 +794,11 @@ class PostfixExpr(OpExpr):
             self.rhs.gen()
             tac.backpatch(getattr(self.rhs, 'nextlist', []), tac.nextquad())
             
-            tac.emit(f"{self.place} = {self.lhs.place} [ {self.rhs.place} ]")
+            tmpvar = tac.newtmp()
+            symtable.add_var(tmpvar, self.rhs.expr_type)
+            tac.emit(f"{tmpvar} = {self.rhs.place} int* ${self.lhs.expr_type.get_ref_size()}")
+
+            tac.emit(f"{self.place} = {self.lhs.place} [ {tmpvar} ]")
         elif self.ops == '(':
             # stdio function (special as it contain variable number of args)
             if self.lhs.name in ['printf', 'scanf']:
@@ -797,7 +847,7 @@ class PostfixExpr(OpExpr):
             
             var_type = self.lhs.expr_type._type.variables[self.rhs]
 
-            if var_type.is_struct_type():
+            if var_type.is_struct_type() or var_type.is_array():
                 # store only addr of struct
                 tac.emit(f"{self.place} = {self.lhs.place} int+ ${offset}")
             else:
@@ -805,7 +855,7 @@ class PostfixExpr(OpExpr):
                     tac.emit(f"{self.place} = {self.lhs.place} int+ ${offset}")
                 else:
                     var_addr = tac.newtmp()
-                    symtable.add_var(var_addr, VarType(1, var_type._type))
+                    symtable.add_var(var_addr, VarType(1 + var_type.ref_count, var_type._type, var_type.arr_offset))
 
                     tac.emit(f"{var_addr} = {self.lhs.place} int+ ${offset}")
                     tac.emit(f"{self.place} = * {var_addr}")
@@ -1017,7 +1067,11 @@ class AssignExpr(OpExpr):
             self.rhs.gen()
             tac.backpatch(getattr(self.rhs, 'nextlist', []), tac.nextquad())
             
-            tac.emit(f"{self.lhs.lhs.place} [ {self.lhs.rhs.place} ] = {self.rhs.place}")
+            tmpvar = tac.newtmp()
+            symtable.add_var(tmpvar, self.lhs.rhs.expr_type)
+            tac.emit(f"{tmpvar} = {self.lhs.rhs.place} int* ${self.lhs.lhs.expr_type.get_ref_size()}")
+            
+            tac.emit(f"{self.lhs.lhs.place} [ {tmpvar} ] = {self.rhs.place}")
         elif isinstance(self.lhs, PostfixExpr) and self.lhs.ops in ['.', '->']:
             # we need self.lhs as lhs of '=' => it should be addr of some memory location which 
             # '=' will update
@@ -1128,7 +1182,8 @@ class InitDeclarator(_BaseDecl):
         if self.initializer is not None:
             
             if isinstance(self.initializer, Initializers):
-                raise Exception('Initializers not handled')
+                self.initializer.compatible_with(self.expr_type, error=True)
+                return
             
             if self.initializer.expr_type.ref_count == 0:
                 if self.expr_type.ref_count + len(self.expr_type.arr_offset) == 0:
@@ -1162,11 +1217,20 @@ class InitDeclarator(_BaseDecl):
 
     def gen(self):
         if self.initializer is not None:
-            self.initializer.gen()
-            tac.backpatch(getattr(self.initializer, 'nextlist', []), tac.nextquad())
+            if isinstance(self.initializer, Initializers):
+                addr = tac.newtmp()
+                if self.expr_type.is_array() or self.expr_type.is_struct_type():
+                    symtable.add_var(addr, self.expr_type)
+                else:
+                    symtable.add_var(addr, VarType(1+self.expr_type.ref_count, self.expr_type._type, self.expr_type.arr_offset))
+                tac.emit(f"{addr} = & {self.declarator.name}")
+                self.initializer.gen_init(addr, self.expr_type)
+                self.nextlist = getattr(self.initializer, 'nextlist', [])
+            else:
+                self.initializer.gen()
+                tac.backpatch(getattr(self.initializer, 'nextlist', []), tac.nextquad())
 
-            # TODO: handle initializers
-            tac.emit(f"{self.declarator.name} = {self.initializer.place}")
+                tac.emit(f"{self.declarator.name} = {self.initializer.place}")
         else:
             pass
 
@@ -1248,7 +1312,10 @@ class StructUnionSpecifier(Specifier):
                     parser_error('Redeclaration of variable named `{}` inside struct'.format(decl.name))
 
                 self.variables[decl.name] = vartype
-
+    
+    def get_struct_type(self):
+        return self.struct_type
+    
     def gen(self):
         pass
 
@@ -1424,7 +1491,177 @@ class Initializers(_BASENODE):
         for init in self.init_list:
             init.gen()
             tac.backpatch(getattr(init, 'nextlist', []), tac.nextquad())
+    
+    def compatible_with(self, vartype : VarType, error=False):
+        
+        if vartype.is_array():
+            # lhs is array
+            if len(self.init_list) > vartype.get_array_len():
+                if error:
+                    parser_error(f"too many initializers")
+                return False
+            
+            if not self.check_array_init(vartype, error=error):
+                return False
+        
+        elif vartype.is_struct_type():
+            # lhs is struct
+            structtype = vartype._type
 
+            if len(self.init_list) > len(structtype.variables):
+                if error:
+                    parser_error(f"too many initializers")
+                return False
+            
+            if not self.check_struct_init(structtype, error=error):
+                return
+        
+        else:
+            # lhs is of a basic type
+            if len(self.init_list) != 1:
+                if error:
+                    parser_error(f"too many/few initializers")
+                return False
+            
+            if not isinstance(self.init_list[0], BaseExpr):
+                if error:
+                    parser_error(f"too many braces around scalar initializer for type {vartype}")
+                return False
+            
+            if not self.check_basic_init(self.init_list[0].expr_type, vartype, error=error):
+                return False
+        
+        return True
+            
+    def check_array_init(self, vartype, error=False):
+        for init_idx, init in enumerate(self.init_list):
+            if isinstance(init, Initializers):
+                if not init.compatible_with(vartype.get_array_element_type(), error=error):
+                    return False
+            else:
+                # init is an expression
+                element_type = vartype.get_array_element_type()
+                if not self.check_basic_init(init.expr_type, element_type, error=error):
+                    return False
+                else:
+                    self.init_list[init_idx] = CastExpr(element_type, init)
+        return True
+
+    def check_struct_init(self, structtype, error=False):
+        for init_idx, (vname, vartype) in enumerate(structtype.variables.items()):
+            if init_idx >= len(self.init_list):
+                return True
+            init = self.init_list[init_idx]
+            if isinstance(init, Initializers):
+                if not init.compatible_with(vartype, error=error):
+                    return False
+            else:
+                # init is an expression
+                element_type = vartype
+                if not self.check_basic_init(init.expr_type, element_type, error=error):
+                    return False
+                else:
+                    self.init_list[init_idx] = CastExpr(vartype, init)
+        return True
+
+    def check_basic_init(self, init : VarType, element_type : VarType, error=False):
+        while(element_type.is_array() or element_type.is_struct_type()):
+            if element_type.is_array():
+                # type of first element of array
+                element_type = element_type.get_array_element_type()
+            elif element_type.is_struct_type():
+                # type of first element of struct
+                element_type = element_type._type.get_first_element_type()
+        if not init.castable_to(element_type):
+            if error:
+                parser_error(f"Can not caste {init} into {element_type}")
+            return False
+
+    def gen_init(self, name, vartype : VarType):
+        if vartype.is_array():
+            self.gen_array_init(name, vartype)
+        
+        elif vartype.is_struct_type():
+            # lhs is struct
+            structtype = vartype._type
+
+            self.gen_struct_init(name, structtype)
+        
+        else:
+            # lhs is of a basic type
+            self.gen_basic_init(self.init_list[0], name, vartype)
+        
+        return True
+            
+    def gen_array_init(self, arr_addr, vartype):
+        init_len = len(self.init_list)
+        for init_idx, init in enumerate(self.init_list):
+            element_type = vartype.get_array_element_type()
+
+            tmpvar = tac.newtmp()
+            if element_type.is_array() or element_type.is_struct_type():
+                symtable.add_var(tmpvar, element_type)
+            else:
+                symtable.add_var(tmpvar, VarType(1 + element_type.ref_count, element_type._type, element_type.arr_offset))
+            
+            tac.emit(f"{tmpvar} = {arr_addr} int+ ${init_idx * vartype.get_ref_size()}")
+            
+            if isinstance(init, Initializers):    
+                init.gen_init(tmpvar, element_type)
+            else:
+                self.gen_basic_init(init, tmpvar, element_type)
+                    
+            if init_idx < init_len-1:
+                tac.backpatch(getattr(init, 'nextlist', []), tac.nextquad())
+            else:
+                self.nextlist = getattr(init, 'nextlist', [])
+
+    def gen_struct_init(self, struct_addr, structtype):
+        init_len = len(self.init_list)
+        for init_idx, (vname, vartype) in enumerate(structtype.variables.items()):
+            
+            if init_idx >= len(self.init_list):
+                return
+            
+            tmpvar = tac.newtmp()
+            if vartype.is_struct_type() or vartype.is_array():
+                # addr == object
+                symtable.add_var(tmpvar, vartype)
+            else:
+                symtable.add_var(tmpvar, VarType(1 + vartype.ref_count, vartype._type, vartype.arr_offset))
+
+            tac.emit(f"{tmpvar} = {struct_addr} int+ ${structtype.get_offset(vname)}")
+            init = self.init_list[init_idx]
+            
+            if isinstance(init, Initializers):
+                init.gen_init(tmpvar, vartype)
+            else:
+                self.gen_basic_init(init, tmpvar, vartype)
+            
+            if init_idx < init_len-1:
+                tac.backpatch(getattr(init, 'nextlist', []), tac.nextquad())
+            else:
+                self.nextlist = getattr(init, 'nextlist', [])
+                
+
+    def gen_basic_init(self, init, addr, element_type):
+        # no need for while loop as addr is already addr of first element
+        
+        init.gen()
+        tac.backpatch(getattr(init, 'nextlist', []), tac.nextquad())
+
+        while(element_type.is_array() or element_type.is_struct_type()):
+            if element_type.is_array():
+                # type of first element of array
+                element_type = element_type.get_array_element_type()
+            elif element_type.is_struct_type():
+                # type of first element of struct
+                element_type = element_type._type.get_first_element_type()
+        
+        ref_type = VarType(1 + element_type.ref_count, element_type._type, element_type.arr_offset)
+        symtable.cur_scope().variables[addr]['type'] = ref_type
+        
+        tac.emit(f"* {addr} = {init.place}")
 # #############################################################################
 # Statements            
 # #############################################################################

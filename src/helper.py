@@ -177,6 +177,8 @@ class SymbolTable():
             parser_error('Redeclaration of variable named `{}`'.format(name))
             return
 
+        if "#" in name:
+            vtype.is_tmp = True
         scope.add_var(name, vtype, is_param=is_param)
         # scope.variables[name] = {'type': vtype, 'offset': offset}
 

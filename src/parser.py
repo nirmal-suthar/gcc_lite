@@ -393,12 +393,18 @@ def p_declaration_specifiers(p):
     '''
     if len(p) == 2:
         p[0] = DeclarationSpecifier(None, p[1])
-        parser.type = p[1]
+        if isinstance(p[1], StructUnionSpecifier):
+            parser.type = p[1].get_struct_type()
+        else:
+            parser.type = p[1]
         parser.is_typedef = False
         parser.is_static = False
     else:
         p[0] = DeclarationSpecifier(p[1], p[2])
-        parser.type = p[2]
+        if isinstance(p[2], StructUnionSpecifier):
+            parser.type = p[2].get_struct_type()
+        else:
+            parser.type = p[2]
         parser.is_typedef = (p[1] == 'typedef')
         parser.is_static = (p[1] == 'static')
 
