@@ -1484,6 +1484,8 @@ class CompoundStmt(Statement):
                 self.nextlist = []
             else:
                 self.nextlist = getattr(self.stmt_list[-1], 'nextlist', [])
+        
+        symtable.update_scope_size()
     
     @staticmethod
     def _gen_dot(obj):

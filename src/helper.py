@@ -129,10 +129,14 @@ class SymbolTable():
         self.scope_stack.append(new_scope)
 
     def pop_scope(self) -> None:
+        self.update_scope_size()
+        self.scope_stack.pop()
+
+    def update_scope_size(self) -> None:
         scope = self.cur_scope() 
         if scope.metadata != 'Global':
             scope.parent.child_max_size = max(scope.parent.child_max_size, scope.size+scope.child_max_size)
-        self.scope_stack.pop()
+        
 
     def lookup_var(self, name):
         scope = self.cur_scope()
