@@ -13,8 +13,8 @@ def arg_parser():
     argparser = ArgumentParser(prog='gcc_lite', 
         description='Parser and Semantic checker for C programs')
 
-    argparser.add_argument('input', type=str, 
-        help='C program file to parse')
+    argparser.add_argument('--input', type=str, 
+        help='C program file to parse', default='../test/helloworld.c')
 
     argparser.add_argument('-v', '--verbose', action="store_true", 
         help='Force output on stdout')
@@ -28,13 +28,13 @@ def arg_parser():
     argparser.add_argument('-p', '--png', action="store_true",
          help='Generate graph as png')
     
-    args = argparser.parse_args(args=['/home/nirmal/sem6/CS335/gcc_lite/tests/helloworld.c'])
+    args = argparser.parse_args()
     return args
 
 
 if __name__ == "__main__":
     
-    sys.argv = ['../test/helloworld.c']
+    # sys.argv = ['../test/helloworld.c']
     args = arg_parser()
 
     if args.out is None:

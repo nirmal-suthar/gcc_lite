@@ -199,16 +199,22 @@ class VarType(_BASENODE):
                 raise Exception(f'Invalid type {self._type}')
 
     def get_ref_size(self):
+        return self.get_ref_type().get_size()
+
+    def get_ref_type(self):
         if not self.is_array():
-            return VarType(self.ref_count - 1, self._type).get_size()
+            return VarType(self.ref_count - 1, self._type)
         else:
-            return self.get_array_element_type().get_size()
+            return self.get_array_element_type()
 
     def is_pointer(self):
         return self.ref_count > 0
     
     def is_float(self):
         return (self.ref_count == 0) and (self._type == 'float')
+    
+    def is_char(self):
+        return (self.ref_count == 0) and (self._type == 'char')
     
     def is_array(self):
         if self.arr_offset is None:
