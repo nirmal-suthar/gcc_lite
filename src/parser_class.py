@@ -320,27 +320,6 @@ class BaseExpr(_BASENODE) :
             return True
         return _type in _BASENODE.ops_type.keys[op]
 
-    # def print_compilation_error(msg, line):
-    #     print("Error at line : " + str(line) + " :: " + msg)
-    #     exit()
-
-    # #used for type conversion
-    # def allowed_typecast(converted_from,converted_to):
-    #     global allowed_types
-    #     if converted_from==converted_to:
-    #         return True
-    #     # if "|" in converted_from or "|" in converted_to:
-    #     #     if "|" in converted_from and converted_from[-1]=='p' and (converted_to[-1]=="p" or converted_to in allowed_types["pointer"]):
-    #     #         return True
-    #     #     return False
-    #     if converted_to not in allowed_types.keys():
-    #         return False
-    #     return (converted_from in allowed_types[converted_to])
-
-    # def get_expr_type(expr):
-    #     #function to get type of an expression
-    #     pass
-
 class Const(BaseExpr):
     def __init__(self, const, dvalue):
         super().__init__("Constant")
@@ -581,8 +560,8 @@ class OpExpr(BaseExpr):
                             else:
                                 inferred_type = 'int'
                                 ref_count = 0
-                            self.lhs = CastExpr(VarType(ref_count, inferred_type), self.lhs)
-                            self.rhs = CastExpr(VarType(ref_count, inferred_type), self.rhs)
+                            self.lhs = CastExpr.get_cast(VarType(ref_count, inferred_type), self.lhs)
+                            self.rhs = CastExpr.get_cast(VarType(ref_count, inferred_type), self.rhs)
                         else:
                             compilation_err.append('Type not compatible with ops {}'.format(self.ops))
                             parser.error = compilation_err[-1]
@@ -992,6 +971,12 @@ class CastExpr(BaseExpr):
                 self.expr_type = self.type
     
     @staticmethod
+    def get_cast(target_type,expr):
+        if target_type == expr.expr_type:
+            return expr
+        return CastExpr(target_type, expr)
+
+    @staticmethod
     def _gen_dot(obj):
         dot_list = ['Type Casting', obj.type._gen_dot(obj.type)]
         dot_list.append(obj.expr._gen_dot(obj.expr))
@@ -1049,7 +1034,7 @@ class AssignExpr(OpExpr):
     def get_type(self):
         
         # compatability is checked in CastExpr
-        self.rhs = CastExpr(self.lhs.expr_type, self.rhs)
+        self.rhs = CastExpr.get_cast(self.lhs.expr_type, self.rhs)
         self.expr_type = self.lhs.expr_type
 
 class CondExpr(BaseExpr):
