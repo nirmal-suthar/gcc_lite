@@ -28,12 +28,13 @@ def arg_parser():
     argparser.add_argument('-p', '--png', action="store_true",
          help='Generate graph as png')
     
-    args = argparser.parse_args()
+    args = argparser.parse_args(args=['/home/nirmal/sem6/CS335/gcc_lite/tests/helloworld.c'])
     return args
 
 
 if __name__ == "__main__":
-
+    
+    sys.argv = ['../test/helloworld.c']
     args = arg_parser()
 
     if args.out is None:

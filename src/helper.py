@@ -5,6 +5,7 @@ import re
 stdlib = '''
 int printf(char *s);
 int scanf(char *s);
+void strcpy(char *d, char *s);
 
 // TODO: add malloc, free and math function
 '''
