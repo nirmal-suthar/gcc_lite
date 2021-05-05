@@ -410,7 +410,6 @@ class OpExpr(BaseExpr):
         self.nextlist = []
         if self.ops == '||':
             self.lhs.bool = True
-
             self.rhs.bool = True
 
             self.lhs.gen()
@@ -422,13 +421,12 @@ class OpExpr(BaseExpr):
         elif self.ops == '&&':
             
             self.lhs.bool = True
-
             self.rhs.bool = True
 
             self.lhs.gen()
             tac.backpatch(getattr(self.lhs, 'truelist', []), tac.nextquad())
             self.rhs.gen()
-            self.truelist = self.lhs.truelist
+            self.truelist = self.rhs.truelist
             self.falselist = self.lhs.falselist + self.rhs.falselist
         
         else:
