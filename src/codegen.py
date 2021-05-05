@@ -1,7 +1,7 @@
 from parser import symtable
 import re
 
-from parser_class import Function
+from parser_class import Function, VarType
 import struct
 
 INT_MAX = 2**31 - 1
@@ -57,6 +57,12 @@ class AssemblyGen:
         """ Get symbol table information related to name symbol """
         # print(f'{self.cur_instr}, {self.cur_instr.scope.scope_id}, {self.cur_instr.scope.lookup_info(name)}, {name}')
         return self.cur_instr.scope.lookup_info(name)
+
+    def is_char(self, name) -> bool:
+        var = self.cur_instr.scope.lookup_info(name)
+        if var is None:
+            return True
+        return not var['type'].is_pointer and (var['type'].basic_type() == 'char')
 
     def get_addr(self, name_info, displ=False):
         """ get memory address of name """
@@ -118,12 +124,12 @@ class AssemblyGen:
         self.add('.text')
         self.add('.global main')
 
-        #For file io fns from fileio.s file
-        print("\textern fcreate1")
-        print("\textern fwrite2")
-        print("\textern fclose1")
-        print("\textern fopen1")
-        print("\textern fread2")
+        # #For file io fns from fileio.s file
+        # self.add("\textern fcreate1")
+        # self.add("\textern fwrite2")
+        # self.add("\textern fclose1")
+        # self.add("\textern fopen1")
+        # self.add("\textern fread2")
 
         # add fmt string info
         for (label, fmt_str) in symtable.fmt_var.items():
@@ -171,11 +177,17 @@ class AssemblyGen:
             self.binary_op_assembly(code)
 
         elif code.instr == 'mov':
-            # mov e1, e2
-            # Forcing e2 to be a register
-            r2 = self.get_symbol(code.e2, reg=True)
-            r1 = self.get_symbol(code.e1)
-            self.add(f'mov {r1}, {r2}')
+            # check if instruction is 1byte aligned
+            if self.is_char(code.e2):
+                self.spillreg(self.reg_no['eax'])
+                self.loadreg(self.reg_no['eax'], code.e1)
+                self.add(f'movb %al, {self.get_addr(code.e2)}')
+            else:
+                # mov e1, e2
+                # Forcing e2 to be a register
+                r2 = self.get_symbol(code.e2, reg=True)
+                r1 = self.get_symbol(code.e1)
+                self.add(f'mov {r1}, {r2}')
 
         elif code.instr == 'unaryop':
             self.unary_op_assembly(code)
@@ -216,12 +228,12 @@ class AssemblyGen:
                 self.reg_d[self.reg_no['eax']] = code.e2
                 self.addr_d[code.e2] = self.reg_no['eax']
 
-        elif code.instr == 'printf':
+        elif code.instr in ['printf', 'scanf']:
 
             self.spillreg(self.reg_no['eax'])
 
             # assuming label for the function is same as name of the function
-            self.add(f'call printf')
+            self.add(f'call {code.instr}')
 
             self.add(f'add ${code.e1}, %esp')
 
@@ -229,19 +241,6 @@ class AssemblyGen:
                 self.reg_d[self.reg_no['eax']] = code.e2
                 self.addr_d[code.e2] = self.reg_no['eax']
         
-        elif code.instr == 'scanf':
-
-            self.spillreg(self.reg_no['eax'])
-
-            # assuming label for the function is same as name of the function
-            self.add(f'call scanf')
-
-            self.add(f'add ${code.e1}, %esp')
-
-            if code.e2 != '#':
-                self.reg_d[self.reg_no['eax']] = code.e2
-                self.addr_d[code.e2] = self.reg_no['eax']
-
         elif code.instr == 'push param':
             if self.is_float(code.e1):
                 if code.e1 in self.addr_d:
@@ -404,6 +403,20 @@ class AssemblyGen:
                 # using fnstcw, fldcw, etc instructions
                 self.add(f'fistp {self.get_addr(code.e2)}')
 
+        elif code.op == 'int2char':
+            self.spillreg(self.reg_no['eax'])
+            self.loadreg(self.reg_no['eax'], code.e1)
+            self.add(f'movb %al, {self.get_addr(code.e2)}')
+        elif code.op == 'char2int':
+            self.add(f'movzbl {self.get_addr(code.e1)}, {self.get_symbol(code.e2, reg=True)}')
+        elif code.op == 'float2char':
+            # float => int => char
+            raise Exception('not handled')
+        elif code.op == 'char2float':
+            # char => int => float
+            raise Exception('not handled')
+        else:
+            raise Exception(f'Invalid code.op = {code.op}')
     
     def binary_op_assembly(self, code):
         """
@@ -746,186 +759,3 @@ neg_relop = {"==":"!=", "!=":"==", "<=": ">", "<": ">=", ">=": "<", ">=": "<"}
 allocated = [0]*6
 reloplatest=0 #used to store info for compare and jump
 curr_procedure = ['empty','main']
-
-# def spillbeforecall():
-#     for q in range(6):
-#         if(regalloc[q]!=0) and not "temp" in regalloc[q]:
-#         #Search for the function where the variable in that register was defined
-#             #check its offset
-#             offset = 0#TODO symtable.function[curr_procedure[0]]['variables'][str(regalloc[q])]['offset']
-#             if(offset<0):
-#                 print('\tmov '+ '[ebp+' + str(abs(offset)) + ']' + ' , ' + reg_name[q])
-#             else:
-#                 print('\tmov '+ '[ebp-' + str(offset) + ']' + ' , ' + reg_name[q])
-#         regalloc[q] = 0
-
-# def isAssigned(var):
-#     for i in range(0,6):
-#         if(regalloc[i]==var):
-#             return i
-#     return 0
-
-# def loadreg(a, var):
-#     offset = 0#TODO get offset of var symtable.function[curr_procedure[0]]['variables'][str(regalloc[q])]['offset']
-#     if(offset<0):
-#         print('\tmov '+ reg_name[a] + ' , ' + '[ebp+' + str(abs(offset)) + ']')
-#     else:
-#         print('\tmov '+ reg_name[a] + ' , ' + '[ebp-' + str(offset) + ']' )
-
-# def printins(ins,op1,op2='0'):
-#     if ins == 'MOV':
-#         if op1 != op2:
-#             print('\tmov '+ op2 +' , '+op1)
-#     elif ins == 'A':
-#         print('\tadd '+op2+' , '+op1)
-#     elif ins == 'S':
-#         print('\tsub '+op2+' , '+op1)
-#     elif ins == "MUL":
-#         print('\timul '+ op1)
-#     elif ins == "P":
-#         print('\tpush ' +op1)
-#     elif ins=="neg":
-#         print('\tneg '+op1)
-#     elif ins=="AND":
-#         print('\tand '+op1 + ' , '+op2)
-#     elif ins == "DIV":
-#         print('\tdiv '+op1)
-
-#     elif ins == "C":
-#         print('\tcmp '+op2+' , '+op1)
-#     elif ins == ">=":
-#         spillbeforecall()
-#         print('\tjge '+op1)
-#     elif ins == ">":
-#         spillbeforecall()
-#         print('\tjg '+op1)
-#     elif ins == "<=":
-#         spillbeforecall()
-#         print('\tjle '+op1)
-#     elif ins == "<":
-#         spillbeforecall()
-#         print('\tjl '+op1)
-#     elif ins == "==":
-#         spillbeforecall()
-#         print('\tje '+op1)
-#     elif ins == "!=":
-#         spillbeforecall()
-#         print('\tjne '+op1)
-  
-#     elif ins == "GOTO":
-#          # will be called if tac code is 'goto : '
-#         spillbeforecall()
-#         print('\tjmp '+op1)
-#     elif ins == "LAB":
-#         # will be called if tac code is 'label : '
-#         spillbeforecall()
-#         print('\n'+op1+':')
-#         allocated = [0]*6
-
-# # This function should return a register after allocationg
-# def getreg(i):
-
-#     for q in range(6):
-#         if regalloc[q] == 0:
-#             return q
-   
-#     # Register Spilling
-
-# def regs(i, var, load=0, lhs=0):
-    
-#     tmp=isAssigned(var)
-#     #import pdb; pdb.set_trace()
-
-#     if(tmp!=0):
-#         a=reg_name[tmp]
-#     else:
-#         a=getreg(i)
-#         if load == 1:
-#             loadreg(a, var)
-#         regalloc[a] = var
-#         a = reg_name[a]
-#     if lhs == 1:
-#         if "temp" == tac.code[i][1][0:4] and tac.code[i][1] != tac.code[i][0]:
-#             for x in range(0,6):
-#                 if(regalloc[x]==tac.code[i][1]):
-#                     q = x
-#                     regalloc[x] = 0
-#                     break
-
-#         if "temp" == tac.code[i][2][0:4] and tac.code[i][2] != tac.code[i][0]:
-#             for x in range(0,6):
-#                 if(regalloc[x]==tac.code[i][2]):
-#                     q = x
-#                     regalloc[x] = 0
-#                     break
-#     return a
-
-# def ADDSUB(quad,isadd=1):
-#     #TODO
-#     #if both const, call regs for op1, then printins("MOV") and then printins("A/S")
-#     #otherwise store regs for all ops, then printins("MOV") and then printins("A/S")
-
-# def MUL(quad):
-#     #TODO
-
-# def DIV(quad):
-#     #TODO
-
-# def COMPARE(quad):
-#     #TODO
-
-# def EQUAL(quad):
-#     #TODO
-
-# def IFGOTO(quad):
-#     #TODO
-
-
-# #Converts every instruction to corresponding assembly code
-# def generate():
-#     flag_for_pop=0
-#     fgl =0
-#     print("section .text")
-#     print("\tglobal main")
-#     print("\textern printInt1")
-#     print("\textern scanInt0")
-#     print("\textern printString1")
-#     print("\textern scanString0")
-#     print("\textern fcreate1")
-#     print("\textern fwrite2")
-#     print("\textern fclose1")
-#     print("\textern fopen1")
-#     print("\textern fread2")
-#     print("\textern append2")
-#     print("\textern val1")
-#     print("\textern next1")
-
-#     for i in range(len(tac.code)):
-#        if(tac.code[i][3]=='+'):
-#             #import pdb; pdb.set_trace()
-#             ADDSUB(i)
-#         elif(tac.code[i][3]=='-'):
-#             ADDSUB(i,0)
-#         elif(tac.code[i][3]=='*'):
-#             MUL(i)
-#         elif(tac.code[i][3]=="/"):
-#             DIV(i)
-#         elif(tac.code[i][3]=='='):
-#             #import pdb; pdb.set_trace()
-#             EQUAL(i)
-#         elif(tac.code[i][0]=='goto'):
-#             printins("J",tac.code[i][3])
-#         elif(tac.code[i][0]=='label :'):
-#             printins("L", tac.code[i][3])
-#         elif(tac.code[i][0]=="ifgoto"):
-#             IFGOTO(i)
-#         elif(tac.code[i][3]=='||' or tac.code[i][3]=='&&'):
-#             pass
-#         elif(tac.code[i][3]=='<'or tac.code[i][3]=='<='or tac.code[i][3]=='>'or tac.code[i][3]=='>='or tac.code[i][3]=='=='or tac.code[i][3]=='!='):
-#             COMPARE(i)
-
-#         ## CASES for function, return, call , push , pop
-
-#     print("\n\tmov eax , 1")
-#     print("\tmov ebx , 0")
-#     print("\tint 0x80")

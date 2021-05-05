@@ -1,4 +1,5 @@
 from os import removedirs
+from sys import exec_prefix
 from typing import Union, List
 import pydot
 from parser import parser, parser_error
@@ -248,12 +249,14 @@ class VarType(_BASENODE):
         if self == other:
             return copy.deepcopy(self)
         
+        # if it is pointer => other must be same
         if self.is_pointer():
             if self == other:
                 return copy.deepcopy(self)
             else:
                 return None
     
+        # if not pointer => handle on scale of basic_type
         elif self.basic_type() in ['int', 'char']:
             if other.is_pointer():
                 return None
@@ -372,7 +375,20 @@ class Const(BaseExpr):
             self.place = tac.newtmp()
             symtable.add_var(self.place, self.expr_type)
             tac.emit(f'{self.place} = ${binary(float(self.const))}')
+        elif self.expr_type == VarType(1, 'char'):   
+            self.fmt_sym = tac.fmt_string()
+            symtable.add_fmt(self.fmt_sym, self.const)
+
+            self.place = tac.newtmp()
+            symtable.add_var(self.place, self.expr_type)
+
+            tac.emit(f'param ${self.fmt_sym}')
+            tac.emit(f'param {self.place}')
+            tac.emit(f'call strcpy #')
+
         else:
+            # in case of constant we store the trimmed constant
+            # val as the place
             self.place = '$'+self.const
         
         if getattr(self, 'bool', False):
@@ -387,13 +403,13 @@ class Const(BaseExpr):
         elif self.dvalue == 'float':
             self.expr_type = VarType(0, 'float')
         elif self.dvalue == 'char':
-            self.expr_type = VarType(0, 'char')
+            self.const = str(ord(self.const[1]))
+            self.dvalue = 'int'
+            self.expr_type = VarType(0, 'int')
         elif self.dvalue == 'STRING_LITERAL':
-            self.expr_type = VarType(1, 'char')
+            self.expr_type = VarType(1, 'char', [Const(str(len(self.const)-1), 'int')])
         else:
-            compilation_err.append('Unknown Constant type')
-            parser.error = compilation_err[-1]
-            parser_error()
+            parser_error('Unknown Constant type')
 
     @staticmethod
     def _gen_dot(obj):
@@ -524,11 +540,19 @@ class OpExpr(BaseExpr):
         ref_count = 0
         inferred_type = 'int'
 
-        if (
-            self.lhs.expr_type._type not in self.ops_type[self.ops] and
-            self.rhs.expr_type._type not in self.ops_type[self.ops]
-        ):
-            parser_error(f'Invalid operands to ops {self.ops} (have `{self.lhs.expr_type}` and `{self.rhs.expr_type}`)')
+        # if any of the operand is char than cast it to `int` for ops
+        if self.lhs.expr_type == VarType(0,'char'):
+            self.lhs = CastExpr.get_cast(VarType(0, 'int'), self.lhs)
+
+        if self.rhs.expr_type == VarType(0,'char'):
+            self.rhs = CastExpr.get_cast(VarType(0, 'int'), self.rhs)
+
+        # will be error when (void *) + int 
+        # if (
+        #     self.lhs.expr_type._type not in self.ops_type[self.ops] and
+        #     self.rhs.expr_type._type not in self.ops_type[self.ops]
+        # ):
+        #     parser_error(f'Invalid operands to ops {self.ops} (have `{self.lhs.expr_type}` and `{self.rhs.expr_type}`)')
 
         if self.ops in ['>', '>=', '<', '<=']:
             if self.lhs.expr_type.get_caste_type(self.rhs.expr_type):
@@ -570,7 +594,7 @@ class OpExpr(BaseExpr):
             # lhs is int and rhs is pointer
             if self.rhs.expr_type.ref_count > 0:
                 if self.ops in ['+']:
-                    if self.lhs.expr_type._type == 'int' or self.lhs.expr_type._type == 'char':
+                    if self.lhs.expr_type._type == 'int':
                         inferred_type = self.rhs.expr_type._type
                         ref_count = self.rhs.expr_type.ref_count
                     else:
@@ -603,13 +627,9 @@ class OpExpr(BaseExpr):
                             self.lhs = CastExpr.get_cast(VarType(ref_count, inferred_type), self.lhs)
                             self.rhs = CastExpr.get_cast(VarType(ref_count, inferred_type), self.rhs)
                         else:
-                            compilation_err.append('Type not compatible with ops {}'.format(self.ops))
-                            parser.error = compilation_err[-1]
-                            parser_error()
+                            parser_error('Type not compatible with ops {}'.format(self.ops))
                     else:
-                        compilation_err.append('Type not compatible with ops {}'.format(self.ops))
-                        parser.error = compilation_err[-1]
-                        parser_error()
+                        parser_error('Type not compatible with ops {}'.format(self.ops))
 
         self.expr_type = VarType(ref_count, inferred_type)
 
@@ -700,6 +720,10 @@ class UnaryExpr(OpExpr):
 
         ref_count = 0
         inferred_type = 'int'
+
+        # if any of the operand is char than cast it to `int` for ops
+        if self.rhs.expr_type == VarType(0,'char'):
+            self.rhs = CastExpr.get_cast(VarType(0, 'int'), self.rhs)
 
         # sizeof ops
         if self.ops == 'sizeof':
@@ -865,6 +889,10 @@ class PostfixExpr(OpExpr):
         inferred_type = 'int'
         arr_offset = []
 
+        # if any of the operand is char than cast it to `int` for ops
+        if isinstance(self.lhs, BaseExpr) and self.lhs.expr_type == VarType(0,'char'):
+            self.lhs = CastExpr.get_cast(VarType(0, 'int'), self.lhs)
+
         # arithmetic ops
         if self.ops in ['--', '++']:
             if self.lhs.expr_type.ref_count == 0:
@@ -923,7 +951,6 @@ class PostfixExpr(OpExpr):
         # function calling
         elif self.ops == '(':
             arg_list = [] if self.rhs is None else self.rhs
-            # sanity checking of function args and 
 
             _var = symtable.lookup_func(self.lhs)
             if isinstance(_var, Function):
@@ -945,14 +972,21 @@ class PostfixExpr(OpExpr):
                 elif len(arg_list) == len(func.args):
                     inferred_type = func.ret_type._type
                     ref_count = func.ret_type.ref_count
-                    # TODO: add argument checking logic and typecasting it!
+    
+                    # sanity checking of function args and casting them
+                    if self.rhs:
+                        casted_args = []
+                        for i, (arg, (_,expected)) in enumerate(zip(arg_list, func.args)):
+                            given = arg.expr_type
+                            if expected.get_caste_type(given) is None:
+                                parser_error(f'incompatible type for argument {i+1} of `{func.name}`')
+                            else:
+                                casted_args.append(CastExpr.get_cast(expected, arg))
+                        self.rhs = casted_args
                 else:
-                    compilation_err.append('too few/many arguments to function {}'.format(func.name))
-                    parser.error = compilation_err[-1]
-                    parser_error()
+                    parser_error('too few/many arguments to function {}'.format(func.name))
             else:
                 parser_error(f'called object {self.lhs} is not a function')
-
 
         # array reference
         elif self.ops == '[':
@@ -995,7 +1029,7 @@ class CastExpr(BaseExpr):
         symtable.add_var(self.place, self.expr_type)
 
         if self.expr.expr_type.is_pointer():
-            if self.expr_type.is_pointer() or self.expr_type.basic_type() == 'int':
+            if self.expr_type.is_pointer() or self.expr_type == VarType(0,'int'):
                 tac.emit(f"{self.place} = {self.expr.place}") # type of self.place and self.expr.place is different
             else:
                 tac.emit(f"{self.place} = int2{self.expr_type.basic_type()} {self.expr.place}")
@@ -1006,10 +1040,10 @@ class CastExpr(BaseExpr):
                 else:
                     tac.emit(f"{self.place} = {self.expr.expr_type.basic_type()}2int {self.expr.place}")
             else:
-                if self.expr.expr_type.basic_type() == 'float':
+                if self.expr.expr_type.basic_type() == self.expr_type.basic_type():
                     tac.emit(f"{self.place} = {self.expr.place}")
                 else:
-                    tac.emit(f"{self.place} = {self.expr.expr_type.basic_type()}2float {self.expr.place}")
+                    tac.emit(f"{self.place} = {self.expr.expr_type.basic_type()}2{self.expr_type.basic_type()} {self.expr.place}")
 
     def get_type(self):
         if self.expr.expr_type.is_pointer():
@@ -1019,26 +1053,22 @@ class CastExpr(BaseExpr):
                 self.expr_type = self.type
             else:
                 # target is not pointer
-                if self.type._type in ['int', 'char']:
+                if self.type._type in ['int']:
                     # target is int / char
                     self.expr_type = self.type
                 else:
                     # target is float
-                    compilation_err.append('Cannot convert pointer to float')
-                    parser.error = compilation_err[-1]
-                    parser_error()
+                    parser_error(f'Cannot convert pointer to {self.expr.expr_type._type}')
         else:
             # source is not pointer
             if self.type.is_pointer():
                 # target is pointer
-                if self.expr.expr_type._type in ['int', 'char']:
+                if self.expr.expr_type._type in ['int']:
                     # source is int / char
                     self.expr_type = self.type
                 else:
                     # source is float
-                    compilation_err.append('Cannot convert float to pointer')
-                    parser.error = compilation_err[-1]
-                    parser_error()
+                    parser_error(f'Cannot convert {self.expr.expr_type._type} to pointer')
             else:
                 # target is int/char/float, and source is also int/char/float
                 self.expr_type = self.type
@@ -1110,6 +1140,9 @@ class AssignExpr(OpExpr):
 
     def get_type(self):
         
+        if self.ops in ['*=','/=','%=','+=','-=', '<<=', '>>=', '&=', '|=', '^=']:
+            self.rhs = OpExpr(self.lhs, self.ops[:-1], self.rhs)
+
         # compatability is checked in CastExpr
         self.rhs = CastExpr.get_cast(self.lhs.expr_type, self.rhs)
         self.expr_type = self.lhs.expr_type
@@ -1152,26 +1185,26 @@ class CondExpr(BaseExpr):
         if self.expr_type is None:
             parser_error("Types not compatible with ternary operator")
 
-class CommaExpr(BaseExpr):
-    def __init__(self, *expr):
-        super().__init__("Comma Expression")
-        self.expr_list = expr
-        self.get_type()
+# class CommaExpr(BaseExpr):
+#     def __init__(self, *expr):
+#         super().__init__("Comma Expression")
+#         self.expr_list = expr
+#         self.get_type()
 
-    def add_expr(self, expr):
-        self.expr_list.append(expr)
+#     def add_expr(self, expr):
+#         self.expr_list.append(expr)
 
-    def gen(self):
-        for expr in self.expr_list:
-            expr.gen()
-            tac.backpatch(getattr(expr, 'nextlist', []), tac.nextquad())
+#     def gen(self):
+#         for expr in self.expr_list:
+#             expr.gen()
+#             tac.backpatch(getattr(expr, 'nextlist', []), tac.nextquad())
         
-        self.place = tac.newtmp()
-        symtable.add_var(self.place, self.expr_type)
-        tac.emit(f"{self.place} = {self.expr_list[-1].place}")
+#         self.place = tac.newtmp()
+#         symtable.add_var(self.place, self.expr_type)
+#         tac.emit(f"{self.place} = {self.expr_list[-1].place}")
 
-    def get_type(self):
-        self.expr_type = self.expr_list[-1].expr_type
+#     def get_type(self):
+#         self.expr_type = self.expr_list[-1].expr_type
 
 # #############################################################################
 # Declarators            
