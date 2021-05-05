@@ -55,7 +55,8 @@ class ScopeTable:
         elif self.metadata == 'Function':
             if is_param:
 
-                offset = self.param_size + 2*ADDR_SIZE + vtype.get_size() # 2 ADDR_SIZE for return addr and rbp
+                # offset = self.param_size + 2*ADDR_SIZE + vtype.get_size() # 2 ADDR_SIZE for return addr and rbp
+                offset = self.param_size + ADDR_SIZE + vtype.get_size() # ADDR_SIZE for storing ebp
                 self.param_size += vtype.get_size()
             else:
                 offset = -(vtype.get_size() + self.size)
@@ -136,7 +137,6 @@ class SymbolTable():
         scope = self.cur_scope() 
         if scope.metadata != 'Global':
             scope.parent.child_max_size = max(scope.parent.child_max_size, scope.size+scope.child_max_size)
-        
 
     def lookup_var(self, name):
         scope = self.cur_scope()
