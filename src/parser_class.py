@@ -4,6 +4,7 @@ import pydot
 from parser import parser, parser_error
 from helper import *
 import copy
+import struct
 from collections import OrderedDict
 
 ADDR_SIZE = 4
@@ -12,6 +13,9 @@ CHAR_SIZE = 1
 FLOAT_SIZE = 4
 ALIGN_SHIFT = 2 # all offset should be 2^2 = 4 bytes aligned (32 bit machine)
 ALIGN_BYTES = 4
+
+def binary(num):
+    return hex(struct.unpack('<I', struct.pack('<f', num))[0])
 
 # #############################################################################
 # Misc.            
@@ -202,6 +206,9 @@ class VarType(_BASENODE):
     def is_pointer(self):
         return self.ref_count > 0
     
+    def is_float(self):
+        return (self.ref_count == 0) and (self._type == 'float')
+    
     def is_array(self):
         if self.arr_offset is None:
             return False
@@ -361,7 +368,12 @@ class Const(BaseExpr):
 
         # in case of constant we store the trimmed constant
         # val as the place
-        self.place = '$'+self.const
+        if self.dvalue == 'float':
+            self.place = tac.newtmp()
+            symtable.add_var(self.place, self.expr_type)
+            tac.emit(f'{self.place} = ${binary(float(self.const))}')
+        else:
+            self.place = '$'+self.const
         
         if getattr(self, 'bool', False):
             self.truelist = [tac.nextquad()]
@@ -620,12 +632,14 @@ class UnaryExpr(OpExpr):
         if self.ops == 'sizeof':
             tac.emit(f"{self.place} = {self.rhs.get_size()}")
         elif self.ops == '++':
+            # TODO: handle floats
             self.rhs.gen()
             tac.backpatch(getattr(self.rhs, 'nextlist', []), tac.nextquad())
 
             tac.emit(f"{self.place} = {self.rhs.place}")
             tac.emit(f"{self.rhs.place} = {self.rhs.place} + 1")
         elif self.ops == '--':
+            # TODO: handle floats
             self.rhs.gen()
             tac.backpatch(getattr(self.rhs, 'nextlist', []), tac.nextquad())
 
@@ -699,7 +713,7 @@ class UnaryExpr(OpExpr):
                     parser.error = compilation_err[-1]
                     parser_error()
                 
-                inferred_type = 'int'
+                inferred_type = self.rhs.expr_type._type
                 ref_count = 0
 
             else:
@@ -759,12 +773,14 @@ class PostfixExpr(OpExpr):
                 symtable.add_var(self.place, self.expr_type)
 
         if self.ops == '++':
+            # TODO: handle floats
             self.lhs.gen()
             tac.backpatch(getattr(self.lhs, 'nextlist', []), tac.nextquad())
             
             tac.emit(f"{self.lhs.place} = {self.lhs.place} int+ $1")
             tac.emit(f"{self.place} = {self.lhs.place}")
         elif self.ops == '--':
+            # TODO: handle floats
             self.lhs.gen()
             tac.backpatch(getattr(self.lhs, 'nextlist', []), tac.nextquad())
             
@@ -857,7 +873,7 @@ class PostfixExpr(OpExpr):
                     parser.error = compilation_err[-1]
                     parser_error()
                 
-                inferred_type = 'int'
+                inferred_type = 'int' # Fix: it should be float/int
                 ref_count = 0
 
             else:
@@ -996,25 +1012,35 @@ class CastExpr(BaseExpr):
                     tac.emit(f"{self.place} = {self.expr.expr_type.basic_type()}2float {self.expr.place}")
 
     def get_type(self):
-        if self.expr.expr_type.ref_count > 0:
-            if self.type.ref_count > 0:
+        if self.expr.expr_type.is_pointer():
+            # source is pointer
+            if self.type.is_pointer():
+                # target is pointer
                 self.expr_type = self.type
             else:
-                if self.expr.expr_type._type in ['int', 'char']:
+                # target is not pointer
+                if self.type._type in ['int', 'char']:
+                    # target is int / char
                     self.expr_type = self.type
                 else:
+                    # target is float
                     compilation_err.append('Cannot convert pointer to float')
                     parser.error = compilation_err[-1]
                     parser_error()
         else:
-            if self.type.ref_count > 0:
+            # source is not pointer
+            if self.type.is_pointer():
+                # target is pointer
                 if self.expr.expr_type._type in ['int', 'char']:
+                    # source is int / char
                     self.expr_type = self.type
                 else:
+                    # source is float
                     compilation_err.append('Cannot convert float to pointer')
                     parser.error = compilation_err[-1]
                     parser_error()
             else:
+                # target is int/char/float, and source is also int/char/float
                 self.expr_type = self.type
     
     @staticmethod
@@ -1503,7 +1529,7 @@ class Initializers(_BASENODE):
                 return False
             
             if not self.check_struct_init(structtype, error=error):
-                return
+                return False
         
         else:
             # lhs is of a basic type
@@ -1562,9 +1588,11 @@ class Initializers(_BASENODE):
                 # type of first element of struct
                 element_type = element_type._type.get_first_element_type()
         if not init.castable_to(element_type):
+            # print(init, element_type)
             if error:
                 parser_error(f"Can not caste {init} into {element_type}")
             return False
+        return True
 
     def gen_init(self, name, vartype : VarType):
         if vartype.is_array():
@@ -1648,9 +1676,11 @@ class Initializers(_BASENODE):
                 element_type = element_type._type.get_first_element_type()
         
         ref_type = VarType(1 + element_type.ref_count, element_type._type, element_type.arr_offset)
-        symtable.cur_scope().variables[addr]['type'] = ref_type
+        tmpvar = tac.newtmp()
+        symtable.add_var(tmpvar, ref_type)
+        tac.emit(f'{tmpvar} = {addr}') # types of tmpvar and addr are different
         
-        tac.emit(f"* {addr} = {init.place}")
+        tac.emit(f"* {tmpvar} = {init.place}")
 # #############################################################################
 # Statements            
 # #############################################################################

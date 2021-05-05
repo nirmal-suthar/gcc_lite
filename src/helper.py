@@ -54,10 +54,15 @@ class ScopeTable:
 
         elif self.metadata == 'Function':
             if is_param:
-
-                # offset = self.param_size + 2*ADDR_SIZE + vtype.get_size() # 2 ADDR_SIZE for return addr and rbp
-                offset = self.param_size + ADDR_SIZE + vtype.get_size() # ADDR_SIZE for storing ebp
-                self.param_size += vtype.get_size()
+                if vtype.is_float():
+                    # to push float as a parameter lea -8(%esp), %esp 
+                    # allocates 8 bytes for 1 float, (don't know why? if taken 4 it gives incorrect output)
+                    offset = self.param_size + ADDR_SIZE + 8
+                    self.param_size += 8
+                else:
+                    # offset = self.param_size + 2*ADDR_SIZE + vtype.get_size() # 2 ADDR_SIZE for return addr and rbp
+                    offset = self.param_size + ADDR_SIZE + vtype.get_size() # ADDR_SIZE for storing ebp
+                    self.param_size += vtype.get_size()
             else:
                 offset = -(vtype.get_size() + self.size)
                 self.size = -offset
