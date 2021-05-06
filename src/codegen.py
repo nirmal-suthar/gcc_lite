@@ -11,6 +11,9 @@ def binary(num):
     return hex(struct.unpack('<I', struct.pack('<f', num))[0])
     # return ''.join('{:0>8b}'.format(c) for c in struct.pack('!f', num))
 
+def binary2float(b):
+    return struct.unpack('>f', struct.pack('>I', int(b, 16)))[0]
+
 class AssemblyGen:
     def __init__(self, func_code):
         self.func_code = func_code
@@ -133,7 +136,7 @@ class AssemblyGen:
     def get_symbol(self, name, reg=False, byte_reg=False, float=False): # TODO: think of some good name for this function !!
         """ returns register / memory where symbol name is stored """
         if name in self.addr_d:
-            if not self.is_byte_reg(self.addr_d[name]):
+            if byte_reg and not self.is_byte_reg(self.addr_d[name]):
                 # name in non byte register [esi, edi]
                 old_r = self.addr_d[name]
                 self.spillreg(old_r, need=False)
@@ -198,7 +201,7 @@ class AssemblyGen:
                 if str(idx) in self.labels:
                     self.add(f'{self.labels[str(idx)]}:')
                 
-                self.add(f'// {code}')
+                self.add(f'\n // {code} \n // {self.reg_no} \n // {self.addr_d} \n // {self.reg_d}')
                 # gen it!
                 self.gen_instr(code)
 
@@ -439,7 +442,13 @@ class AssemblyGen:
         elif code.op == '*':
             # mov (e1), e2
             # e2 requires to be in register
-            self.add(f'mov ({self.get_symbol(code.e1, reg=True)}), {self.get_symbol(code.e2, reg=True)}')
+            if self.is_char(code.e2):
+                # read 1 byte from (e1) into register e2
+                r2 = self.get_symbol(code.e2, byte_reg=True)
+                self.add(f'movb ({self.get_symbol(code.e1, reg=True)}), %{r2[2]}l')
+                self.add(f'movzbl %{r2[2]}l, {r2}')
+            else:
+                self.add(f'mov ({self.get_symbol(code.e1, reg=True)}), {self.get_symbol(code.e2, reg=True)}')
         elif code.op == '~':
             # not e1
             r = self.get_symbol(code.e2, reg=True)
@@ -497,14 +506,15 @@ class AssemblyGen:
                 self.spillreg(self.addr_d[code.e2])            
             
             if self.is_const(code.e1):
-                val = int(float(code.e1[1:]))
+                val = int(binary2float(code.e1[1:]))
+                # print(code.e1[1:])
                 self.add(f'movl ${hex(val)}, {self.get_addr(code.e2)}')
             else:
                 self.add(f'fld {self.get_addr(code.e1)}')
                 # fistp rounds off the float rather than truncating
                 # to change this behaviour we need to change control word
                 # using fnstcw, fldcw, etc instructions
-                self.add(f'fistp {self.get_addr(code.e2)}')
+                self.add(f'fistpl {self.get_addr(code.e2)}')
 
         elif code.op == 'int2char':
             self.spillreg(self.reg_no['eax'])
@@ -528,11 +538,13 @@ class AssemblyGen:
         if code.op == 'int+':
             # add e1, e2
             r2 = self.get_symbol(code.e3, reg=True)
+            self.add(f'// code.e3 in reg {r2} of int+')
             
             # copy e2 into e3
             self.add(f'mov {self.get_symbol(code.e2)}, {r2}')
-
+            self.add(f'// loading {code.e1}')
             self.add(f'add {self.get_symbol(code.e1)}, {r2}')
+            self.add(f'// end of int+')
         elif code.op == 'int-':
             # sub e2, e1
             r2 = self.get_symbol(code.e3, reg=True)

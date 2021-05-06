@@ -409,7 +409,9 @@ class Const(BaseExpr):
         elif self.dvalue == 'float':
             self.expr_type = VarType(0, 'float')
         elif self.dvalue == 'char':
-            self.const = str(ord(self.const[1]))
+            print(self.const)
+            self.const = str(ord(self.const[1:-1]))
+            print(self.const)
             self.dvalue = 'int'
             self.expr_type = VarType(0, 'int')
         elif self.dvalue == 'STRING_LITERAL':
