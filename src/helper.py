@@ -30,6 +30,10 @@ class ScopeTable:
         self.child_max_size = 0
         self.param_size = 0
 
+    def get_size(self):
+        _size = self.size + self.child_max_size
+        aligned_size = ((_size+ALIGN_BYTES-1)>>ALIGN_SHIFT)<<ALIGN_SHIFT 
+        return aligned_size
 
     def lookup_var(self, name):
         if name in self.variables:

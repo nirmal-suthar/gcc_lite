@@ -101,7 +101,12 @@ class StructType(_BASENODE):
         if self.variables:
             self.set_offsets()
 
-    def get_size(self):
+    def get_size(self) -> int:
+        _size = self._get_size()
+        aligned_size = ((_size+ALIGN_BYTES-1)>>ALIGN_SHIFT)<<ALIGN_SHIFT 
+        return aligned_size
+
+    def _get_size(self):
         return self.size
         # size = 0
         # for var in self.variables:
@@ -140,8 +145,6 @@ class StructType(_BASENODE):
     def get_element_type(self, name):
         return self.variables[name]
     
-    def _get_size(self):
-        raise Exception('TODO')
 
 class Function(_BASENODE):
     def __init__(self, ret_type, name, args, is_declared=False):
@@ -169,9 +172,10 @@ class VarType(_BASENODE):
         self.is_tmp = False
 
     def get_size(self) -> int:
-        _size = self._get_size()
-        aligned_size = ((_size+ALIGN_BYTES-1)>>ALIGN_SHIFT)<<ALIGN_SHIFT 
-        return aligned_size
+        # _size = self._get_size()
+        # aligned_size = ((_size+ALIGN_BYTES-1)>>ALIGN_SHIFT)<<ALIGN_SHIFT 
+        # return aligned_size
+        return self._get_size()
 
     def _get_size(self) -> int:
         if self.ref_count > 0:
@@ -216,6 +220,9 @@ class VarType(_BASENODE):
     def is_char(self):
         return (self.ref_count == 0) and (self._type == 'char')
     
+    def is_string(self):
+        return self.is_array() and self.get_array_element_type().is_char()
+
     def is_array(self):
         if self.arr_offset is None:
             return False
@@ -385,12 +392,12 @@ class Const(BaseExpr):
             self.fmt_sym = tac.fmt_string()
             symtable.add_fmt(self.fmt_sym, self.const)
 
-            self.place = tac.newtmp()
-            symtable.add_var(self.place, self.expr_type)
+            self.place = '$' + self.fmt_sym
+            # symtable.add_var(self.place, self.expr_type)
 
-            tac.emit(f'param ${self.fmt_sym}')
-            tac.emit(f'param {self.place}')
-            tac.emit(f'call strcpy #')
+            # tac.emit(f'param ${self.fmt_sym}')
+            # tac.emit(f'param {self.place}')
+            # tac.emit(f'call strcpy #')
 
         else:
             # in case of constant we store the trimmed constant
@@ -1263,7 +1270,7 @@ class InitDeclarator(_BaseDecl):
                     else:
                         self.initializer = CastExpr(self.expr_type, self.initializer)
                 else:
-                    if self.initializer.expr_type.ref_count == self.expr_type.ref_count + len(self.expr_type.arr_offset):
+                    if self.initializer.expr_type.ref_count == self.expr_type.ref_count:
                         pass
                     else:
                         self.initializer = CastExpr(self.expr_type, self.initializer)
@@ -1280,6 +1287,21 @@ class InitDeclarator(_BaseDecl):
                 tac.emit(f"{addr} = & {self.declarator.name}")
                 self.initializer.gen_init(addr, self.expr_type)
                 self.nextlist = getattr(self.initializer, 'nextlist', [])
+            elif isinstance(self.initializer, Const) and self.initializer.expr_type.is_string():
+                self.initializer.gen()
+                self.nextlist = getattr(self.initializer, 'nextlist', [])
+                
+                addr = tac.newtmp()
+                if self.expr_type.is_array() or self.expr_type.is_struct_type():
+                    symtable.add_var(addr, self.expr_type)
+                else:
+                    symtable.add_var(addr, VarType(1+self.expr_type.ref_count, self.expr_type._type, self.expr_type.arr_offset))
+                tac.emit(f"{addr} = & {self.declarator.name}")
+                
+                tac.emit(f'param {self.initializer.place}')
+                tac.emit(f'param {addr}')
+                tac.emit(f'call strcpy #')
+                # tac.emit(f'add $0x8, %esp')
             else:
                 self.initializer.gen()
                 tac.backpatch(getattr(self.initializer, 'nextlist', []), tac.nextquad())
