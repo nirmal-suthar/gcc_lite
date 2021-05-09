@@ -4,7 +4,7 @@ import sys, argparse, pydot
 from argparse import ArgumentParser
 # from parser import parser, lexer, symtable
 from parser import parser, lexer
-from helper import symtable, tac
+from helper import symtable, tac, stdlib
 from codegen import AssemblyGen
 import os
 
@@ -13,7 +13,7 @@ def arg_parser():
     argparser = ArgumentParser(prog='gcc_lite', 
         description='Parser and Semantic checker for C programs')
 
-    argparser.add_argument('input', type=str, 
+    argparser.add_argument('--input', type=str, 
         help='C program file to parse')
 
     argparser.add_argument('-v', '--verbose', action="store_true", 
@@ -46,7 +46,7 @@ if __name__ == "__main__":
     with open(args.input, 'r') as f:
         ifile = f.read()
     
-
+    ifile = stdlib + ifile
     lexer.filename = args.input 
     lexer.lines = ifile.split("\n")
 
@@ -61,7 +61,7 @@ if __name__ == "__main__":
 
     tac.dump_code(args.out.split('.')[-2] + '.out')
 
-    asm = AssemblyGen(tac.code)
+    asm = AssemblyGen(tac.func_code)
     asm.gen_assembly()
     asm.dump_code(args.out.split('.')[-2] + '.s')
 
@@ -74,6 +74,6 @@ if __name__ == "__main__":
         graph.write_png(png_file)
         print("Graph generated {}".format(png_file))
 
-    os.system("nasm -f elf32 fileio.s")
-    os.system("gcc -m32 fileio.o ")
+    # os.system("nasm -f elf32 fileio.s")
+    os.system("gcc -m32 --no-pie " + args.out.split('.')[-2] + '.s')
     os.system("./a.out")

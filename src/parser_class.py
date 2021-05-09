@@ -670,14 +670,25 @@ class UnaryExpr(OpExpr):
             tac.backpatch(getattr(self.rhs, 'nextlist', []), tac.nextquad())
 
             tac.emit(f"{self.place} = {self.rhs.place}")
-            tac.emit(f"{self.rhs.place} = {self.rhs.place} + 1")
+            
+            tmpvar = tac.newtmp()
+            symtable.add_var(tmpvar, self.expr_type)
+
+            tac.emit(f"{tmpvar} = {self.rhs.place} int+ $1")
+            tac.emit(f"{self.rhs.place} = {tmpvar}")
+
         elif self.ops == '--':
             # TODO: handle floats
             self.rhs.gen()
             tac.backpatch(getattr(self.rhs, 'nextlist', []), tac.nextquad())
 
             tac.emit(f"{self.place} = {self.rhs.place}")
-            tac.emit(f"{self.rhs.place} = {self.rhs.place} - 1")
+            
+            tmpvar = tac.newtmp()
+            symtable.add_var(tmpvar, self.expr_type)
+
+            tac.emit(f"{tmpvar} = {self.rhs.place} int- $1")
+            tac.emit(f"{self.rhs.place} = {tmpvar}")
         elif self.ops in ['&', '*', '-', '~']:
             if self.ops == '&' and (not isinstance(self.rhs, Identifier)):
                 if isinstance(self.rhs, PostfixExpr):
@@ -813,15 +824,25 @@ class PostfixExpr(OpExpr):
             # TODO: handle floats
             self.lhs.gen()
             tac.backpatch(getattr(self.lhs, 'nextlist', []), tac.nextquad())
+
+            tmpvar = tac.newtmp()
+            symtable.add_var(tmpvar, self.expr_type)
+
+            tac.emit(f"{tmpvar} = {self.lhs.place} int+ $1")
+            tac.emit(f"{self.lhs.place} = {tmpvar}")
             
-            tac.emit(f"{self.lhs.place} = {self.lhs.place} int+ $1")
             tac.emit(f"{self.place} = {self.lhs.place}")
         elif self.ops == '--':
             # TODO: handle floats
             self.lhs.gen()
             tac.backpatch(getattr(self.lhs, 'nextlist', []), tac.nextquad())
             
-            tac.emit(f"{self.lhs.place} = {self.lhs.place} int- $1")
+            tmpvar = tac.newtmp()
+            symtable.add_var(tmpvar, self.expr_type)
+
+            tac.emit(f"{tmpvar} = {self.lhs.place} int- $1")
+            tac.emit(f"{self.lhs.place} = {tmpvar}")
+
             tac.emit(f"{self.place} = {self.lhs.place}")
         elif self.ops == '[':
             self.lhs.gen()
@@ -1929,6 +1950,9 @@ class IterStmt(Statement):
         # `while` loop
         if self.iter_type == 'while':
             
+            # update all variables required for body in memory
+            tac.emit('spillall')
+
             begin = tac.nextquad()
 
             self.iter_expr.bool = True
@@ -1936,6 +1960,10 @@ class IterStmt(Statement):
             self.iter_expr.gen()
             tac.backpatch(getattr(self.iter_expr, 'truelist', []), tac.nextquad())
             self.stmt.gen()
+
+            # update all variables required for body in memory
+            tac.emit(f'spill all')
+            
             tac.emit(f'goto {begin}')
 
             tac.backpatch(getattr(self.stmt, 'nextlist', []) + getattr(self.stmt, 'continuelist', []), begin)
@@ -1949,12 +1977,16 @@ class IterStmt(Statement):
             e1.gen()
             tac.backpatch(getattr(e1, 'nextlist', []), tac.nextquad())
 
+            
             # if `e3` is None then it is equiv to `while` loop
             if e3 is None:
                 self.iter_type = 'while'
                 self.iter_expr = e2
                 self.gen()
             else:
+                # update all variables required for body in memory
+                tac.emit(f'spill all')
+            
                 begin = tac.nextquad()
             
                 e2.bool = True
@@ -1971,6 +2003,9 @@ class IterStmt(Statement):
                 tac.backpatch(getattr(e3, 'continuelist', []) + getattr(self.stmt, 'continuelist', []), begin)
 
                 self.nextlist = getattr(e3, 'breaklist', []) + getattr(self.stmt, 'breaklist', []) + getattr(e2, 'falselist', [])
+
+                # update all variables required for body in memory
+                tac.emit(f'spill all')
 
                 tac.emit(f'goto {begin}')
 
