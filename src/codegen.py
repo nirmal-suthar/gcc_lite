@@ -225,6 +225,11 @@ class AssemblyGen:
             self.add(f'{value["name"]}:')
             self.add(f'.zero {value["type"].get_size()}')
         
+        # add fmt string info
+        for (label, fmt_str) in symtable.fmt_var.items():
+            self.add(f'{label}:')
+            self.add (f'.string {fmt_str}')
+
         # .text section
         self.add('.text')
         self.add('.global main')
@@ -235,11 +240,6 @@ class AssemblyGen:
         # self.add("\textern fclose1")
         # self.add("\textern fopen1")
         # self.add("\textern fread2")
-
-        # add fmt string info
-        for (label, fmt_str) in symtable.fmt_var.items():
-            self.add(f'{label}:')
-            self.add (f'.string {fmt_str}')
 
         # start traversing the IR (one function at a time!)
         for fidx, codes in enumerate(self.func_code):
@@ -257,6 +257,7 @@ class AssemblyGen:
 
                 # if cur code is part of new label => create it
                 if str(idx) in self.labels:
+                    self.spillallregs() # spill registers before jump / labelled instruction for consistency
                     self.add(f'{self.labels[str(idx)]}:')
                 
                 self.add(f'\n // {code} \n // {self.reg_no} \n // {self.addr_d} \n // {self.reg_d}')
@@ -282,9 +283,11 @@ class AssemblyGen:
             else:
                 self.add(f'cmp $0, {self.get_symbol(code.e1)}')
             
+            self.spillallregs() # spill registers before jumps / labelled statements for consistency
             self.add(f'jne {self.labels[code.label]}')
 
         elif code.instr == 'goto':
+            self.spillallregs() # spill registers before jumps / labelled statements for consistency
             self.add(f'jmp {self.labels[code.label]}')
 
         elif code.instr == 'binop':
@@ -442,20 +445,10 @@ class AssemblyGen:
                 self.add(f'{instr} {r1}, ({r3} , {r2}, 1)')
 
         elif code.instr == 'ifeq':
-            if code.e1 in self.addr_d:
-                r1 = '%' + self.reg_name[self.addr_d[code.e1]]
-                r2 = self.get_symbol(code.e2)
-            elif code.e2 in self.addr_d:
-                r2 = '%' + self.reg_name[self.addr_d[code.e2]]
-                r1 = self.get_symbol(code.e1)
-            else:
-                # at least one register required for cmp
-                r = self.getreg()
-                self.loadreg(r, code.e1)
-                r1 = '%' + self.reg_name[r]
-                r2 = self.get_symbol(code.e2)
+            r1 = self.get_symbol(code.e1, reg=True)
+            r2 = self.get_symbol(code.e2)
 
-            self.add(f'cmp {r1}, {r2}')
+            self.add(f'cmp {r2}, {r1}')
             self.add(f'je {self.labels[code.label]}')
 
         elif code.instr == 'return':
@@ -640,7 +633,10 @@ class AssemblyGen:
             self.add(f'mov $0, %edx')
             self.add(f'mov {self.get_symbol(code.e1)}, %eax')
             
-            self.add(f'idiv {self.get_symbol(code.e2)}')
+            if self.is_const(code.e2):
+                self.add(f'idiv {self.get_symbol(code.e2, reg=True)}')
+            else:
+                self.add(f'idiv {self.get_symbol(code.e2)}')
             self.reg_d[self.reg_no['eax']] = code.e3
             self.addr_d[code.e3] = self.reg_no['eax']
         elif code.op == '%':

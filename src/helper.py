@@ -364,8 +364,6 @@ class Instr:
             self.instr = 'scanf'
             self.e1 = m.group('e1')
             self.e2 = m.group('e2')
-        elif code in ['spill all', ]:
-            self.instr = code
         else:
             raise Exception(f'regex not handled! {code}')
     

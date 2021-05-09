@@ -220,6 +220,9 @@ class VarType(_BASENODE):
     def is_char(self):
         return (self.ref_count == 0) and (self._type == 'char')
     
+    def is_int(self):
+        return (self.ref_count == 0) and (self._type == 'int')
+    
     def is_string(self):
         return self.is_array() and self.get_array_element_type().is_char()
 
@@ -1763,6 +1766,7 @@ class Initializers(_BASENODE):
         tac.emit(f'{tmpvar} = {addr}') # types of tmpvar and addr are different
         
         tac.emit(f"* {tmpvar} = {init.place}")
+
 # #############################################################################
 # Statements            
 # #############################################################################
@@ -1861,7 +1865,8 @@ class SelectionStmt(Statement):
         self.select_expr = select_expr
         self.if_stmt = if_stmt
         self.else_stmt = else_stmt
-    
+        self.check_semantics()
+
     def gen(self):
 
         if self.select_type == 'if':
@@ -1895,26 +1900,33 @@ class SelectionStmt(Statement):
                 self.returnlist = getattr(self.if_stmt, 'returnlist', []) + getattr(self.select_expr, 'returnlist', [])
         # switch
         else:
+            if len(self.stmt_list) == 0:
+                # no statements in switch statement
+                return
+            
             self.select_expr.gen()
             tac.backpatch(getattr(self.select_expr, 'nextlist', []), tac.nextquad())
             
             case_list = []
-            case_stmts = self.if_stmt.stmt_list
+            case_stmts = self.stmt_list # self.stmt_list is created during check_semantics
             
             testlist = [tac.nextquad()]
             tac.emit(f'goto ')
 
             case_labels = []
-            case_labels.append(tac.nextquad())
             self.breaklist = []
             self.returnlist = []
 
             for idx, case_stmt in enumerate(case_stmts):
-                case_stmt.breaklabel = self.nextlist
+                
+                if isinstance(case_stmt, LabeledStmt):
+                    # collect start of each case/default
+                    case_labels.append(tac.nextquad())
+
                 if idx < len(case_stmts) - 1:
                     case_stmt.gen()
                     tac.backpatch(getattr(case_stmt, 'nextlist', []), tac.nextquad())
-                    case_labels.append(tac.nextquad())
+                    
                 else:
                     case_stmt.gen()
                     self.nextlist = [tac.nextquad()]
@@ -1923,7 +1935,9 @@ class SelectionStmt(Statement):
                 self.breaklist += getattr(case_stmt, 'breaklist', [])
                 self.returnlist += getattr(case_stmt, 'returnlist', [])
 
-                case_list.append(case_stmt.case)
+                if isinstance(case_stmt, LabeledStmt):
+                    # collect case of each case/default
+                    case_list.append(case_stmt.case)
             
             tac.backpatch(testlist, tac.nextquad())
             for idx, case in enumerate(case_list):
@@ -1937,6 +1951,39 @@ class SelectionStmt(Statement):
             
             tac.backpatch(self.breaklist, tac.nextquad()) # can be shifted to upper productions
 
+    def check_semantics(self):
+        if self.select_type == 'switch':
+            if not (self.select_expr.expr_type.is_char() or self.select_expr.expr_type.is_int()):
+                parser_error("switch quantity not an integer")
+                return
+
+            self.stmt_list = []
+            default_cnt = 0
+            if isinstance(self.if_stmt, CompoundStmt):
+                # for simplisity only Compound statements are allowed after switch
+                first_case = False
+                for stmt in self.if_stmt.stmt_list:
+                    
+                    if isinstance(stmt, LabeledStmt):
+                        first_case = True
+                        if isinstance(stmt.case, tuple):
+                            # check case statement is labeled with constant
+                            if not (isinstance(stmt.case[1], Const) and (stmt.case[1].expr_type.is_char() or stmt.case[1].expr_type.is_int())):
+                                parser_error(f"Case label is not a constant")
+                                return
+                        else:
+                            default_cnt += 1
+                            if default_cnt > 1:
+                                parser_error(f"multiple default labels in one switch")
+                                return
+
+                    if first_case:
+                        # ignore statements before first case/default statement
+                        self.stmt_list.append(stmt)
+                
+            else:
+                # not a compound statement
+                parser_error("Switch statement must have compound statement")
 
 class IterStmt(Statement):
     def __init__(self, iter_type, iter_expr, stmt):
@@ -1961,8 +2008,6 @@ class IterStmt(Statement):
             tac.backpatch(getattr(self.iter_expr, 'truelist', []), tac.nextquad())
             self.stmt.gen()
 
-            # update all variables required for body in memory
-            tac.emit(f'spill all')
             
             tac.emit(f'goto {begin}')
 
@@ -1984,8 +2029,6 @@ class IterStmt(Statement):
                 self.iter_expr = e2
                 self.gen()
             else:
-                # update all variables required for body in memory
-                tac.emit(f'spill all')
             
                 begin = tac.nextquad()
             
@@ -2004,8 +2047,6 @@ class IterStmt(Statement):
 
                 self.nextlist = getattr(e3, 'breaklist', []) + getattr(self.stmt, 'breaklist', []) + getattr(e2, 'falselist', [])
 
-                # update all variables required for body in memory
-                tac.emit(f'spill all')
 
                 tac.emit(f'goto {begin}')
 
