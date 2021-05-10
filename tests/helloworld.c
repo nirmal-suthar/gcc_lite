@@ -13,7 +13,10 @@
 int main()
 {
     int a,b;
-    // switch(a){
+    switch(a)
+    {
         case 1: a++;
+                break;
+    }
     return 0;
 }

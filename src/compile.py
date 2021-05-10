@@ -6,7 +6,7 @@ from argparse import ArgumentParser
 from parser import parser, lexer
 from helper import symtable, tac, stdlib
 from codegen import AssemblyGen
-import os
+
 
 def arg_parser():
 
@@ -14,7 +14,7 @@ def arg_parser():
         description='Parser and Semantic checker for C programs')
 
     argparser.add_argument('--input', type=str, 
-        help='C program file to parse')
+        help='C program file to parse', default='../test/helloworld.c')
 
     argparser.add_argument('-v', '--verbose', action="store_true", 
         help='Force output on stdout')
@@ -27,13 +27,17 @@ def arg_parser():
 
     argparser.add_argument('-p', '--png', action="store_true",
          help='Generate graph as png')
+
+    argparser.add_argument('-l', '--lex', action="store_true",
+         help='Store output of lexer')
     
     args = argparser.parse_args()
     return args
 
 
 if __name__ == "__main__":
-
+    
+    # sys.argv = ['../test/helloworld.c']
     args = arg_parser()
 
     if args.out is None:
@@ -44,9 +48,10 @@ if __name__ == "__main__":
     png_file = args.out.split('.')[-2] + '.png'
 
     with open(args.input, 'r') as f:
-        ifile = f.read()
+        arg_file = f.read()
     
-    ifile = stdlib + ifile
+    
+    ifile = stdlib + arg_file
     lexer.filename = args.input 
     lexer.lines = ifile.split("\n")
 
@@ -73,7 +78,3 @@ if __name__ == "__main__":
     if args.png:
         graph.write_png(png_file)
         print("Graph generated {}".format(png_file))
-
-    # os.system("nasm -f elf32 fileio.s")
-    os.system("gcc -m32 --no-pie " + args.out.split('.')[-2] + '.s')
-    os.system("./a.out")
