@@ -137,11 +137,12 @@ class AssemblyGen:
                 available_regs.append(reg)
         return available_regs
 
-    def get_addr(self, name_info, displ=False):
+    def get_addr(self, name_info, displ=False, need=False):
         """ get memory address of name """
 
         if re.fullmatch('\$.*', name_info):
             return name_info
+        
         elif isinstance(name_info, str):
             # if argument is name of symbol then get info from scope/symbol table
             name = name_info
@@ -149,6 +150,10 @@ class AssemblyGen:
             if name_info == None: # possibly constant value
                 # return '$' + name
                 raise Exception(f'hii {name}')
+        if need:
+            # update memory with latest value if need=True
+            if self.is_in_reg(name_info['name']):
+                self.spillreg(self.get_reg_by_symbol(name_info['name']), need=need)
 
         if name_info['scope_id'] == 0:
             # global variables are stored in .data section
@@ -398,6 +403,7 @@ class AssemblyGen:
 
             # mov e1, (e2)
             # (e2) is memory location so e1 is required to be in register
+
             info = self.get_info(code.e2)
             if info['type'].get_ref_type().is_char():
                 if code.e1 in self.addr_d and self.is_byte_reg(self.addr_d[code.e1]):
@@ -494,7 +500,7 @@ class AssemblyGen:
         if code.op == '&':
             # lea (e1), e2
             # e2 requires to be in register
-            self.add(f'lea {self.get_addr(code.e1)}, {self.get_symbol(code.e2, reg=True)}')
+            self.add(f'lea {self.get_addr(code.e1, need=True)}, {self.get_symbol(code.e2, reg=True)}')
         elif code.op == '*':
             # mov (e1), e2
             # e2 requires to be in register

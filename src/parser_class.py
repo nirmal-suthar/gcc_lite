@@ -211,6 +211,9 @@ class VarType(_BASENODE):
         else:
             return self.get_array_element_type()
 
+    def get_pointer_type(self):
+        return VarType(self.ref_count + 1, self._type, self.arr_offset)
+
     def is_pointer(self):
         return self.ref_count > 0
     
@@ -375,6 +378,28 @@ class BaseExpr(_BASENODE) :
         if op not in _BASENODE.ops_type.keys():
             return True
         return _type in _BASENODE.ops_type.keys[op]
+    
+    def has_lvalue(self, ):
+        # if current expression has address (if current expression can be lhs in assignment op)
+        # checks if address exists for this expression
+        if isinstance(self, Const):
+            return False
+        elif isinstance(self, Identifier):
+            return True
+        elif isinstance(self, UnaryExpr):
+            if self.ops == '*':
+                return True
+            else:
+                return False
+        elif isinstance(self, PostfixExpr):
+            if self.ops in ['[', '.', '->']:
+                return True
+            else:
+                return False
+        else:
+            return False
+
+
 
 class Const(BaseExpr):
     def __init__(self, const, dvalue):
@@ -439,14 +464,19 @@ class Identifier(BaseExpr):
         self.name = name
         self.get_type()
     
-    def gen(self):
+    def gen(self, lvalue = False):
         if self.expr_type.is_struct_type() or self.expr_type.is_array():
             # store starting addr of struct/array
             self.place = tac.newtmp()
             symtable.add_var(self.place, self.expr_type)
             tac.emit(f"{self.place} = & {self.name}")
         else:
-            self.place = self.name # resolved using symtable during code generation
+            if lvalue:
+                self.place = tac.newtmp()
+                symtable.add_var(self.place, self.expr_type.get_pointer_type())
+                tac.emit(f"{self.place} = & {self.name}")
+            else:
+                self.place = self.name # resolved using symtable during code generation
 
         if getattr(self, 'bool', False):
             self.truelist = [tac.nextquad()]
@@ -463,6 +493,9 @@ class Identifier(BaseExpr):
         # print(self.name, self.expr_type)
 
 class OpExpr(BaseExpr):
+    """
+    binary operators : +, -, *, /, %, >, >=, <, <=, ==, !=, ||, &&, <<, >>, |, &, ^
+    """
     def __init__(
         self, 
         lhs: BaseExpr, 
@@ -650,13 +683,16 @@ class OpExpr(BaseExpr):
         self.expr_type = VarType(ref_count, inferred_type)
 
 class UnaryExpr(OpExpr):
+    """
+    unary/prefix operators : +, -, * , &, ++, --, !, ~, sizeof
+    """
     def __init__(self, ops, rhs):
         self.ops_type['++'] = ['int', 'char', 'float']
         self.ops_type['--'] = ['int', 'char', 'float']
         super().__init__(None, ops, rhs)
         self.get_type()
 
-    def gen(self, is_lhs=False):
+    def gen(self, lvalue=False):
         self.place = tac.newtmp()
         
         # if self.expr_type.is_struct_type():
@@ -668,36 +704,55 @@ class UnaryExpr(OpExpr):
         if self.ops == 'sizeof':
             tac.emit(f"{self.place} = {self.rhs.get_size()}")
         elif self.ops == '++':
-            # TODO: handle floats
-            self.rhs.gen()
+            self.rhs.gen(lvalue=True)
             tac.backpatch(getattr(self.rhs, 'nextlist', []), tac.nextquad())
-
-            tac.emit(f"{self.place} = {self.rhs.place}")
             
             tmpvar = tac.newtmp()
             symtable.add_var(tmpvar, self.expr_type)
 
-            tac.emit(f"{tmpvar} = {self.rhs.place} int+ $1")
-            tac.emit(f"{self.rhs.place} = {tmpvar}")
+            tmpvar2 = tac.newtmp()
+            symtable.add_var(tmpvar2, self.rhs.expr_type)
+            
+            tac.emit(f"{tmpvar2} = * {self.rhs.place}")
+
+            if self.expr_type.is_float():
+                tac.emit(f"{tmpvar} = int2float $1")
+
+                tac.emit(f"{tmpvar} = {tmpvar2} float+ {tmpvar}")
+            else:
+                tac.emit(f"{tmpvar} = {tmpvar2} int+ $1")
+
+            tac.emit(f"* {self.rhs.place} = {tmpvar}")
+            tac.emit(f"{self.place} = {tmpvar}")
 
         elif self.ops == '--':
-            # TODO: handle floats
-            self.rhs.gen()
+            self.rhs.gen(lvalue=True)
             tac.backpatch(getattr(self.rhs, 'nextlist', []), tac.nextquad())
-
-            tac.emit(f"{self.place} = {self.rhs.place}")
             
             tmpvar = tac.newtmp()
             symtable.add_var(tmpvar, self.expr_type)
 
-            tac.emit(f"{tmpvar} = {self.rhs.place} int- $1")
-            tac.emit(f"{self.rhs.place} = {tmpvar}")
+            tmpvar2 = tac.newtmp()
+            symtable.add_var(tmpvar2, self.rhs.expr_type)
+            
+            tac.emit(f"{tmpvar2} = * {self.rhs.place}")
+
+            if self.expr_type.is_float():
+                tac.emit(f"{tmpvar} = int2float $1")
+
+                tac.emit(f"{tmpvar} = {tmpvar2} float- {tmpvar}")
+            else:
+                tac.emit(f"{tmpvar} = {tmpvar2} int- $1")
+
+            tac.emit(f"* {self.rhs.place} = {tmpvar}")
+            tac.emit(f"{self.place} = {tmpvar}")
+
         elif self.ops in ['&', '*', '-', '~']:
             if self.ops == '&' and (not isinstance(self.rhs, Identifier)):
                 if isinstance(self.rhs, PostfixExpr):
-                    self.rhs.gen(is_lhs=True)
+                    self.rhs.gen(lvalue=True)
                 elif isinstance(self.rhs, UnaryExpr):
-                    self.rhs.gen(is_lhs=True)
+                    self.rhs.gen(lvalue=True)
                 else:
                     raise Exception("Invalid class {}", type(self.rhs))
                 tac.emit(f"{self.place} = {self.rhs.place}")
@@ -715,7 +770,7 @@ class UnaryExpr(OpExpr):
                 # value of struct == addr of starting position of struct == address of struct
                 tac.emit(f"{self.place} = {self.rhs.place}")
             else:
-                if is_lhs and self.ops == '*':
+                if lvalue and self.ops == '*':
                     tac.emit(f"{self.place} = {self.rhs.place}")
                 else:
                     tac.emit("{} = {} {}".format(self.place, self.ops, self.rhs.place))
@@ -734,14 +789,13 @@ class UnaryExpr(OpExpr):
 
             if not getattr(self, 'bool', False):
                 tac.backpatch(getattr(self, 'truelist', []), tac.nextquad())
-                tac.emit(f'{self.place} = 1')
+                tac.emit(f'{self.place} = $1')
 
                 self.nextlist = getattr(self, 'nextlist', []) + [tac.nextquad()]
                 tac.emit(f'goto ')
 
                 tac.backpatch(getattr(self, 'falselist', []), tac.nextquad())
-                tac.emit(f'{self.place} = 0')
-
+                tac.emit(f'{self.place} = $0')
 
     def get_type(self):
 
@@ -757,12 +811,21 @@ class UnaryExpr(OpExpr):
             inferred_type = 'int'
             ref_count = 0
         # arithmetic ops
-        elif self.ops in ['--', '++', '+', '-']:
+        if self.ops in ['--', '++']:
+            if not self.rhs.has_lvalue():
+                parser_error("lvalue required as increment/decrement operand")
+                self.expr_type = self.rhs.expr_type
+                return
+            else:
+                self.expr_type = self.rhs.expr_type
+                return
+
+        elif self.ops in ['+', '-']:
             if self.rhs.expr_type.ref_count == 0:
                 if self.rhs.expr_type._type not in self.ops_type[self.ops]:
-                    compilation_err.append('Type not compatible with ops {}'.format(self.ops)) 
-                    parser.error = compilation_err[-1]
-                    parser_error()
+                    parser_error('Type not compatible with ops {}'.format(self.ops))
+                    self.expr_type = self.rhs.expr_type
+                    return
                 
                 inferred_type = self.rhs.expr_type._type
                 ref_count = 0
@@ -806,47 +869,61 @@ class UnaryExpr(OpExpr):
         self.expr_type = VarType(ref_count, inferred_type)
 
 class PostfixExpr(OpExpr):
+    """
+    postfix operators : ++, --, array access `[`, function call `(`, `.` , `->`
+    """
     def __init__(self, lhs, ops, rhs=None):
         self.ops_type['++'] = ['int', 'char', 'float']
         self.ops_type['--'] = ['int', 'char', 'float']
         super().__init__(lhs, ops, rhs)
 
-    def gen(self, is_lhs=False):
+    def gen(self, lvalue=False):
         self.place = '#'
         # populate self.place when it is not void
         if self.expr_type != VarType(0, 'void'):
             self.place = tac.newtmp()
-            # if self.expr_type.is_struct_type() or is_lhs:
+            # if self.expr_type.is_struct_type() or lvalue:
                 # tac variables of struct points to the starting of struct
-            if is_lhs:
+            if lvalue:
                 symtable.add_var(self.place, VarType(1 + self.expr_type.ref_count, self.expr_type._type, self.expr_type.arr_offset))
             else:
                 symtable.add_var(self.place, self.expr_type)
 
         if self.ops == '++':
-            # TODO: handle floats
-            self.lhs.gen()
+            self.lhs.gen(lvalue=True)
             tac.backpatch(getattr(self.lhs, 'nextlist', []), tac.nextquad())
+
+            tac.emit(f"{self.place} = * {self.lhs.place}")
 
             tmpvar = tac.newtmp()
             symtable.add_var(tmpvar, self.expr_type)
 
-            tac.emit(f"{tmpvar} = {self.lhs.place} int+ $1")
-            tac.emit(f"{self.lhs.place} = {tmpvar}")
+            if self.expr_type.is_float():
+                tac.emit(f"{tmpvar} = int2float $1")
+                tac.emit(f"{tmpvar} = {self.place} float+ {tmpvar}")
+            else:
+                tac.emit(f"{tmpvar} = {self.place} int+ $1")
             
-            tac.emit(f"{self.place} = {self.lhs.place}")
+            tac.emit(f"* {self.lhs.place} = {tmpvar}")
+            
         elif self.ops == '--':
-            # TODO: handle floats
-            self.lhs.gen()
+            self.lhs.gen(lvalue=True)
             tac.backpatch(getattr(self.lhs, 'nextlist', []), tac.nextquad())
             
+            tac.emit(f"{self.place} = * {self.lhs.place}")
+
             tmpvar = tac.newtmp()
             symtable.add_var(tmpvar, self.expr_type)
 
-            tac.emit(f"{tmpvar} = {self.lhs.place} int- $1")
-            tac.emit(f"{self.lhs.place} = {tmpvar}")
+            if self.expr_type.is_float():
+                tac.emit(f"{tmpvar} = int2float $1")
+                tac.emit(f"{tmpvar} = {self.place} float- {tmpvar}")
+            else:
+                tac.emit(f"{tmpvar} = {self.place} int- $1")
+            
+            tac.emit(f"* {self.lhs.place} = {tmpvar}")
+            
 
-            tac.emit(f"{self.place} = {self.lhs.place}")
         elif self.ops == '[':
             self.lhs.gen()
             tac.backpatch(getattr(self.lhs, 'nextlist', []), tac.nextquad())
@@ -857,8 +934,11 @@ class PostfixExpr(OpExpr):
             tmpvar = tac.newtmp()
             symtable.add_var(tmpvar, self.rhs.expr_type)
             tac.emit(f"{tmpvar} = {self.rhs.place} int* ${self.lhs.expr_type.get_ref_size()}")
-
-            tac.emit(f"{self.place} = {self.lhs.place} [ {tmpvar} ]")
+            
+            if lvalue:
+                tac.emit(f"{self.place} = {self.lhs.place} int+ {tmpvar}")
+            else:
+                tac.emit(f"{self.place} = {self.lhs.place} [ {tmpvar} ]")
         elif self.ops == '(':
             # stdio function (special as it contain variable number of args)
             if self.lhs.name in ['printf', 'scanf']:
@@ -911,7 +991,7 @@ class PostfixExpr(OpExpr):
                 # store only addr of struct
                 tac.emit(f"{self.place} = {self.lhs.place} int+ ${offset}")
             else:
-                if is_lhs:
+                if lvalue:
                     tac.emit(f"{self.place} = {self.lhs.place} int+ ${offset}")
                 else:
                     var_addr = tac.newtmp()
@@ -932,19 +1012,13 @@ class PostfixExpr(OpExpr):
 
         # arithmetic ops
         if self.ops in ['--', '++']:
-            if self.lhs.expr_type.ref_count == 0:
-                if self.lhs.expr_type._type not in self.ops_type[self.ops]:
-                    compilation_err.append('Type not compatible with ops {}'.format(self.ops)) 
-                    parser.error = compilation_err[-1]
-                    parser_error()
-                
-                inferred_type = 'int' # Fix: it should be float/int
-                ref_count = 0
-
+            if not self.lhs.has_lvalue():
+                parser_error("lvalue required as increment/decrement operand")
+                self.expr_type = self.lhs.expr_type # for error recovery
+                return
             else:
-                # pointer increment operation which returns the same type
-                inferred_type = self.lhs.expr_type._type
-                ref_count = self.lhs.expr_type.ref_count
+                self.expr_type = self.lhs.expr_type
+                return
 
         # struct child accessing 
         elif self.ops == '.':
@@ -1157,7 +1231,7 @@ class AssignExpr(OpExpr):
         elif isinstance(self.lhs, PostfixExpr) and self.lhs.ops in ['.', '->']:
             # we need self.lhs as lhs of '=' => it should be addr of some memory location which 
             # '=' will update
-            self.lhs.gen(is_lhs=True)
+            self.lhs.gen(lvalue=True)
             tac.backpatch(getattr(self.lhs, 'nextlist', []), tac.nextquad())
 
             self.rhs.gen()
@@ -1176,6 +1250,11 @@ class AssignExpr(OpExpr):
         tac.emit(f"{self.place} = {self.rhs.place}")
 
     def get_type(self):
+        
+        if not self.lhs.has_lvalue():
+            parser_error("lvalue required as left operand of assignment")
+            self.expr_type = self.lhs.expr_type
+            return
         
         if self.ops in ['*=','/=','%=','+=','-=', '<<=', '>>=', '&=', '|=', '^=']:
             self.rhs = OpExpr(self.lhs, self.ops[:-1], self.rhs)
