@@ -137,7 +137,7 @@ class AssemblyGen:
                 available_regs.append(reg)
         return available_regs
 
-    def get_addr(self, name_info, displ=False, need=False):
+    def get_addr(self, name_info, displ=False, need=False, remove_dollar=False):
         """ get memory address of name """
 
         if re.fullmatch('\$.*', name_info):
@@ -157,7 +157,10 @@ class AssemblyGen:
 
         if name_info['scope_id'] == 0:
             # global variables are stored in .data section
-            return '$' + name_info['name']
+            if remove_dollar:
+                return name_info['name']
+            else:
+                return '$' + name_info['name']
         else:
             if displ:
                 return hex(name_info['offset'])
@@ -359,6 +362,13 @@ class AssemblyGen:
 
             self.spillreg(self.reg_no['eax'])
 
+            # library funcitons may change value in registers
+            # recommanded use of functions wrapped with custom functions
+            # e.g. prefer using prints/printn over printf 
+            # if only custom functions are used no need to spill regs
+            # while using ready-made functions spilling regs is required
+            self.spillallregs()
+
             # assuming label for the function is same as name of the function
             self.add(f'call {code.e1}')
 
@@ -500,7 +510,7 @@ class AssemblyGen:
         if code.op == '&':
             # lea (e1), e2
             # e2 requires to be in register
-            self.add(f'lea {self.get_addr(code.e1, need=True)}, {self.get_symbol(code.e2, reg=True)}')
+            self.add(f'lea {self.get_addr(code.e1, need=True, remove_dollar=True)}, {self.get_symbol(code.e2, reg=True)}')
         elif code.op == '*':
             # mov (e1), e2
             # e2 requires to be in register
@@ -631,7 +641,7 @@ class AssemblyGen:
 
             self.add(f'imul {self.get_symbol(code.e1)}, {r2}')
         elif code.op == 'int/':
-            # idiv e2
+            # idivl e2
             # store e1 in edx:eax, eax will have quotient and edx will have remainder
             self.spillreg(self.reg_no['edx'])
             self.spillreg(self.reg_no['eax'])
@@ -640,9 +650,9 @@ class AssemblyGen:
             self.add(f'mov {self.get_symbol(code.e1)}, %eax')
             
             if self.is_const(code.e2):
-                self.add(f'idiv {self.get_symbol(code.e2, reg=True)}')
+                self.add(f'idivl {self.get_symbol(code.e2, reg=True)}')
             else:
-                self.add(f'idiv {self.get_symbol(code.e2)}')
+                self.add(f'idivl {self.get_symbol(code.e2)}')
             self.reg_d[self.reg_no['eax']] = code.e3
             self.addr_d[code.e3] = self.reg_no['eax']
         elif code.op == '%':
@@ -654,7 +664,7 @@ class AssemblyGen:
             self.add(f'mov $0, %edx')
             self.add(f'mov {self.get_symbol(code.e1)}, %eax')
             
-            self.add(f'idiv {self.get_symbol(code.e2)}')
+            self.add(f'idivl {self.get_symbol(code.e2)}')
             self.reg_d[self.reg_no['edx']] = code.e3
             self.addr_d[code.e3] = self.reg_no['edx']
         elif code.op == '<<':
@@ -797,17 +807,17 @@ class AssemblyGen:
             self.add(f'setne %{r[2]}l')
             self.add(f'movzbl %{r[2]}l, {r}')
         elif op == '<':
-            self.add(f'setb %{r[2]}l')
+            self.add(f'setl %{r[2]}l')
             self.add(f'movzbl %{r[2]}l, {r}')
         elif op == '<=':
-            self.add(f'setbe %{r[2]}l')
+            self.add(f'setle %{r[2]}l')
             self.add(f'movzbl %{r[2]}l, {r}')
         elif op == '>':
-            self.add(f'seta %{r[2]}l')
+            self.add(f'setg %{r[2]}l')
             self.add(f'movzbl %{r[2]}l, {r}')
 
         elif op == '>=':
-            self.add(f'setae %{r[2]}l')
+            self.add(f'setge %{r[2]}l')
             self.add(f'movzbl %{r[2]}l, {r}')
         else:
             raise Exception(f'Unkown comparator {op}')

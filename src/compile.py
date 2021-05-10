@@ -4,8 +4,9 @@ import sys, argparse, pydot
 from argparse import ArgumentParser
 # from parser import parser, lexer, symtable
 from parser import parser, lexer
-from helper import symtable, tac, stdlib
+from helper import symtable, tac
 from codegen import AssemblyGen
+from lib import stdlib
 
 
 def arg_parser():

@@ -856,12 +856,11 @@ class UnaryExpr(OpExpr):
                 parser.error = compilation_err[-1]
                 parser_error()
         elif self.ops == '&':
-            if not isinstance(self.rhs, Identifier) and \
-                (not (isinstance(self.rhs, PostfixExpr) and self.rhs.ops in ['.', '->'])) and \
-                (not (isinstance(self.rhs, UnaryExpr) and self.rhs.ops in ['*'])):
-                compilation_err.append('RHS should be an indentifier / postfix . or -> / unary *')
-                parser.error = compilation_err[-1]
-                parser_error()
+            # if not isinstance(self.rhs, Identifier) and \
+            #     (not (isinstance(self.rhs, PostfixExpr) and self.rhs.ops in ['.', '->'])) and \
+            #     (not (isinstance(self.rhs, UnaryExpr) and self.rhs.ops in ['*'])):
+            if not self.rhs.has_lvalue():
+                parser_error(f'lvalue required as unary `{self.ops}` operand')
             else:
                 ref_count = self.rhs.expr_type.ref_count + 1
                 inferred_type = self.rhs.expr_type._type
@@ -1338,7 +1337,16 @@ class InitDeclarator(_BaseDecl):
         super().__init__('TODO')
         self.declarator = declarator
         self.initializer = initializer
-        self.expr_type = VarType(self.declarator.ref_count, parser.type, self.declarator.arr_offset)
+
+        if isinstance(parser.type, VarType):
+            # declarator is initialized using alias which is stored
+            self.expr_type = VarType(self.declarator.ref_count + parser.type.ref_count, parser.type._type, self.declarator.arr_offset)
+            if self.expr_type.arr_offset == None:
+                self.expr_type.arr_offset = parser.type.arr_offset
+            else:
+                self.expr_type.arr_offset = parser.type.arr_offset + self.expr_type.arr_offset
+        else:
+            self.expr_type = VarType(self.declarator.ref_count, parser.type, self.declarator.arr_offset)
 
         if self.initializer is not None and parser.is_typedef:
             parser_error('can not initialize typedef {}', self.declarator.name)
@@ -1351,10 +1359,8 @@ class InitDeclarator(_BaseDecl):
             
             if self.initializer.expr_type.ref_count == 0:
                 if self.expr_type.ref_count + len(self.expr_type.arr_offset) == 0:
-                    if self.initializer.expr_type._type == parser.type:
+                    if self.initializer.expr_type._type == self.expr_type._type:
                         pass
-
-                    
                     else:
                         self.initializer = CastExpr(self.expr_type, self.initializer)
                 else:
@@ -1510,6 +1516,13 @@ class DeclarationSpecifier(Specifier):
         self.is_typedef = (storage_type_spec == 'typedef')
         self.is_static = (storage_type_spec == 'static')
         self.type = type_spec
+        self.ref_count = 0
+        self.arr_offset = []
+        
+        if isinstance(type_spec, str) and re.fullmatch('typedef@(?P<type_name>[^ ]*)', type_spec):
+            self.ref_count = parser.typedef_type.ref_count
+            self.type_spec = parser.typedef_type._type
+            self.arr_offset = parser.typedef_type.arr_offset
 
         if isinstance(self.type_spec, StructUnionSpecifier):
             self.type_spec = self.type_spec.struct_type
@@ -1592,6 +1605,13 @@ class Declaration(_BaseDecl):
                     continue
 
                 vartype = VarType(decl.ref_count, self._type, decl.arr_offset)
+                
+                # for complex typedef like `type_name` -> `int *`, etc
+                vartype.ref_count += self.specifier.ref_count
+                if vartype.arr_offset == None:
+                    vartype.arr_offset = self.specifier.arr_offset
+                else:
+                    vartype.arr_offset = self.specifier.arr_offset + vartype.arr_offset
 
                 # Sanity checking of arr offset
                 if not all(map(lambda x: isinstance(x, Const) and x.dvalue=='int', decl.arr_offset)):
@@ -1626,6 +1646,13 @@ class Declaration(_BaseDecl):
 
                 vartype = VarType(decl.ref_count, self._type, decl.arr_offset)
 
+                # for complex typedef like `type_name` -> `int *`, etc
+                vartype.ref_count += self.specifier.ref_count
+                if vartype.arr_offset == None:
+                    vartype.arr_offset = self.specifier.arr_offset
+                else:
+                    vartype.arr_offset = self.specifier.arr_offset + vartype.arr_offset
+                
                 # Sanity checking of arr offset
                 if not all(map(lambda x: isinstance(x, Const) and x.dvalue=='int', decl.arr_offset)):
                     parser_error('Size of array `{}` has non-integer type'.format(decl.name))
@@ -1966,6 +1993,8 @@ class SelectionStmt(Statement):
 
                 self.nextlist += getattr(self.if_stmt, 'nextlist', []) + getattr(self.else_stmt, 'nextlist', [])
                 self.returnlist += getattr(self.if_stmt, 'returnlist', []) + getattr(self.else_stmt, 'returnlist', [])
+                self.breaklist += getattr(self.if_stmt, 'breaklist', []) + getattr(self.else_stmt, 'breaklist', [])
+                self.continuelist += getattr(self.if_stmt, 'continuelist', []) + getattr(self.else_stmt, 'continuelist', [])
             # if statement
             else:
                 self.select_expr.bool = True
@@ -1977,6 +2006,8 @@ class SelectionStmt(Statement):
 
                 self.nextlist = getattr(self.if_stmt, 'nextlist', []) + getattr(self.select_expr, 'falselist', [])
                 self.returnlist = getattr(self.if_stmt, 'returnlist', []) + getattr(self.select_expr, 'returnlist', [])
+                self.breaklist += getattr(self.if_stmt, 'breaklist', []) + getattr(self.else_stmt, 'breaklist', [])
+                self.continuelist += getattr(self.if_stmt, 'continuelist', []) + getattr(self.else_stmt, 'continuelist', [])
         # switch
         else:
             if len(self.stmt_list) == 0:
@@ -2076,8 +2107,6 @@ class IterStmt(Statement):
         # `while` loop
         if self.iter_type == 'while':
             
-            # update all variables required for body in memory
-            tac.emit('spillall')
 
             begin = tac.nextquad()
 
@@ -2292,6 +2321,14 @@ class FuncDef(Node):
         self.param_list = param_list
         self.stmt = stmt
         self.vartype = VarType(self.ref_count, self.specifier.type_spec)
+
+        # for complex typedef like `type_name` -> `int *`, etc
+        self.vartype.ref_count += self.specifier.ref_count
+        if self.vartype.arr_offset is None:
+            self.vartype.arr_offset = self.specifier.arr_offset
+        else:
+            self.vartype.arr_offset = self.specifier.arr_offset + vartype.arr_offset
+        
         symtable.add_func(Function(self.vartype, self.name, self.param_list, is_declared=True))
 
     def gen(self):

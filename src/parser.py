@@ -1,6 +1,7 @@
 #! /usr/bin/env python3
 
 from ply import yacc
+from lib import stdlib
 
 def parser_error(error_str=None):
     # subtracting stdlib offset for correct position info
@@ -305,7 +306,7 @@ def p_logical_and_expression(p):
     if len(p)==2:
         p[0] = p[1]
     else:
-        p[0] = OpExpr(p[1], p[2], p[4])
+        p[0] = OpExpr(p[1], p[2], p[3])
 
 def p_logical_or_expression(p):
     ''' logical_or_expression : logical_and_expression
@@ -314,7 +315,7 @@ def p_logical_or_expression(p):
     if len(p)==2:
         p[0] = p[1]
     else:
-        p[0] = OpExpr(p[1], p[2], p[4])
+        p[0] = OpExpr(p[1], p[2], p[3])
 
 def p_conditional_expression(p):
     ''' conditional_expression : logical_or_expression
@@ -404,7 +405,10 @@ def p_declaration_specifiers(p):
         if isinstance(p[2], StructUnionSpecifier):
             parser.type = p[2].get_struct_type()
         else:
-            parser.type = p[2]
+            if re.fullmatch('typedef@(?P<type_name>[^ ]*)', p[2]):
+                parser.type = parser.typedef_type
+            else:
+                parser.type = p[2]
         parser.is_typedef = (p[1] == 'typedef')
         parser.is_static = (p[1] == 'static')
 
@@ -446,10 +450,10 @@ def p_type_specifier(p):
 def p_type_specifier_typedef(p):
     ''' type_specifier : TYPE_NAME
     '''
-    p[0] = p[1]
+    p[0] = 'typedef@' + p[1]
     # print(p[1], symtable.cur_scope().aliases)
     lookup_alias = symtable.lookup_alias(p[1])
-    p.type = lookup_alias._type
+    parser.typedef_type = lookup_alias
     
     # TODO: handle typedef with pointer types e.g. typedef int *ab, **xyz (by using something like p.ref_type)
 

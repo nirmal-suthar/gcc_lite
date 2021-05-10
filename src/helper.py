@@ -2,14 +2,6 @@ import csv
 from parser import parser_error
 import re
 
-stdlib = '''
-int printf(char *s);
-int scanf(char *s);
-void strcpy(char *d, char *s);
-
-// TODO: add malloc, free and math function
-'''
-
 # def parser_error(error_str=None):
 #     parser.compilation_err = True
 #     print(bcolors.BOLD+'{}:{}:'.format(lexer.filename,lexer.lineno)+bcolors.ENDC,end='')
