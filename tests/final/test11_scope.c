@@ -12,13 +12,19 @@ int main()
 {
   int a=10;
   int b;
+  int k;
+  int f1;
+  int q[10];
+  // int a;
   b--;
-  int k =(int) a;
+  k =(int) a;
 
   f();
-  int f = g(a,b);
-  int q[10];
+  f1 = g(a,b);
   q[1] = a;
-  int a = k<2 ? 4: 6 ;
-  
+  a = k<2 ? 4: 6 ;
+  printn(k);
+  prints("\n");
+  printn(q[1]);
+  prints("\n");
 }

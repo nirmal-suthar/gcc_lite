@@ -2,18 +2,19 @@ int main(){
     int list[1000];
     int T ;
     int i,c,d,n,len,t,u,k=1;
+    int d_lim, c_lim;
     prints("Enter the number of test cases : ");
-    T = scanf();
+    T = scanint();
     while(T){
 	T = T-1;
 	prints("Enter the length of the array (<=1000) : ");
-        len = scanf();
+        len = scanint();
         for(i=0;i<len;i=i+1){
-           list[i] = scanf();
+           list[i] = scanint();
         }
 	prints("Sorting the array............ \n");
   
-	int d_lim, c_lim = len - 1;
+	c_lim = len - 1;
         for(c =0;c< c_lim;c=c+1){
 	   d_lim = c_lim - c;
            d=0;

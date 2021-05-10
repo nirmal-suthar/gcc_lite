@@ -14,15 +14,16 @@ int ackermann(int a,int l)
 int main(){
     int T,m,n;
     prints("Input the number of cases : ");
-    T = scanf();
+    T = scanint();
     while(T){
        T = T-1;
        prints("Input m : ");
-       m = scanf();
+       m = scanint();
        prints("Input n : ");
-       n = scanf();
+       n = scanint();
        prints("The corrseponding ackermann value is : ");
-       printf(ackermann(m,n)); 
+       printn(ackermann(m,n)); 
+       prints("\n");
     }
     return 0;
 }

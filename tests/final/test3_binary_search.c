@@ -3,17 +3,17 @@ int main()
    int c, first, last, middle, n, search, array[100];
  
    prints("Enter number of elements\n");
-   n = scanf();
+   n = scanint();
  
    prints("Enter ");
    printn(n);
    prints(" integers\n");
  
    for (c = 0; c < n; c=c+1){
-      array[c] = scanf();
+      array[c] = scanint();
    }
    prints("Enter value to find\n");
-   search = scanf();
+   search = scanint();
  
    first = 0;
    last = n - 1;

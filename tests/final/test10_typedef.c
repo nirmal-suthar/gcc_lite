@@ -1,8 +1,8 @@
 typedef int a;
-typedef a b;
+typedef a *b;
 
 int main()
 {
-    b c;
+    b c[5];
     return 0 ;
 }
