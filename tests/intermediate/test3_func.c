@@ -5,5 +5,5 @@ int foo(int a, int b)
 int main() 
 {
     int c = foo(2,3);
-    int d = foo(2);
+    // int d = foo(2);
 }
