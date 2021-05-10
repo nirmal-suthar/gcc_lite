@@ -140,13 +140,34 @@ class SymbolTable():
         if scope.metadata != 'Global':
             scope.parent.child_max_size = max(scope.parent.child_max_size, scope.size+scope.child_max_size)
 
-    def lookup_var(self, name):
+    def lookup_symbol(self, name):
         scope = self.cur_scope()
         while scope:
+            if scope.lookup_alias(name):
+                return (scope.aliases[name], 'alias')
+
             if scope.lookup_var(name):
-                return scope.variables[name]['type']
+                return (scope.variables[name]['type'], 'var')
+            
             scope = scope.parent
+    
+        if name in self.function:
+            return (self.function[name], 'func')
         return None
+            
+    def lookup_var(self, name):
+        info = self.lookup_symbol(name)
+
+        if info == None or info[1] != 'var':
+            return None
+        else:
+            return info[0]
+        # scope = self.cur_scope()
+        # while scope:
+        #     if scope.lookup_var(name):
+        #         return scope.variables[name]['type']
+        #     scope = scope.parent
+        # return None
 
     def lookup_struct(self, name):
         scope = self.cur_scope()
@@ -157,18 +178,29 @@ class SymbolTable():
         return None
 
     def lookup_alias(self, name):
-        scope = self.cur_scope()
-        while scope:
-            if scope.lookup_alias(name):
-                return scope.aliases[name]
-            scope = scope.parent
-        return None
+        info = self.lookup_symbol(name)
+
+        if info == None or info[1] != 'alias':
+            return None
+        else:
+            return info[0]
+        # scope = self.cur_scope()
+        # while scope:
+        #     if scope.lookup_alias(name):
+        #         return scope.aliases[name]
+        #     scope = scope.parent
+        # return None
         # return self.cur_scope().lookup_alias(id)
 
     def lookup_func(self, name):
-        if name in self.function:
-            return self.function[name]
-        return None
+        info = self.lookup_symbol(name)
+        if info == None or info[1] != 'func':
+            return None
+        else:
+            return info[0]
+        # if name in self.function:
+        #     return self.function[name]
+        # return None
 
     def get_size(self, dtype):
         raise Exception('TODO')
@@ -178,6 +210,14 @@ class SymbolTable():
         if scope.lookup_var(name):
             parser_error('Redeclaration of variable named `{}`'.format(name))
             return
+        
+        if scope.lookup_alias(name):
+            parser_error(f'`{name}` redeclared as different kind of symbol')
+            return
+
+        if scope == self.global_scope and (name in self.function):
+            parser_error(f'`{name}` redeclared as different kind of symbol')
+            return
 
         if "#" in name:
             vtype.is_tmp = True
@@ -185,21 +225,32 @@ class SymbolTable():
         # scope.variables[name] = {'type': vtype, 'offset': offset}
 
     def add_struct(self, name, struct_type):
-        if self.cur_scope().lookup_struct(name):
+        scope = self.cur_scope()
+        if scope.lookup_struct(name):
             parser_error('Redeclaration of struct named `{}`'.format(name))
             return
 
-        self.cur_scope().structs[name] = struct_type
+        scope.structs[name] = struct_type
 
     def add_typedef(self, alias, actual):
         cur_scope = self.cur_scope()
         lookup_alias = cur_scope.lookup_alias(alias)
+        
+        if cur_scope.lookup_var(alias):
+            parser_error(f'`{alias}` redeclared as different kind of symbol')
+            return
+
+        if cur_scope == self.global_scope and (name in self.function):
+            parser_error(f'`{name}` redeclared as different kind of symbol')
+            return
+            
         if lookup_alias is None:
             cur_scope.aliases[alias] = actual
         elif lookup_alias == actual:
             pass
         else:
-            parser_error('Redeclaration of type/alias named {}'.format(alias))
+            # parser_error('Redeclaration of type/alias named {}'.format(alias))
+            parser_error('conflicting types for `{}`'.format(alias))
         
     def add_func(self, func) -> None:
         if func.name in self.function:
@@ -209,7 +260,8 @@ class SymbolTable():
                 parser_error('Redefinition of function named `{}`'.format(func.name))
                 return
 
-            if func_.ret_type == func.ret_type and func_.args == func.args:
+            # if func_.ret_type == func.ret_type and func_.args == func.args:
+            if func_ == func:
                 return
 
             parser_error('Redeclaration of function named {}'.format(func.name))

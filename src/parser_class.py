@@ -160,8 +160,21 @@ class Function(_BASENODE):
             size += vartype.get_size()
         return size
         
+    def __eq__(self, other):
+        # is_declared is not checked
+        if not isinstance(other, Function):
+            return False
+        
+        args_same = True
+        if len(self.args) != len(other.args):
+            return False
+        for (name1, type1), (name2, type2) in zip(self.args, other.args):
+            args_same = args_same and (type1 == type2)
+        return args_same and self.name == other.name and self.ret_type == other.ret_type
+    
     def __str__(self):
         return 'Function(ret_type={}, name={}, args={}, is_declared={})'.format(str(self.ret_type), self.name, self.args, self.is_declared)
+        
 
 class VarType(_BASENODE):
     def __init__(self, ref_count, _type, arr_offset=None):
@@ -1518,7 +1531,7 @@ class DeclarationSpecifier(Specifier):
         self.type = type_spec
         self.ref_count = 0
         self.arr_offset = []
-        
+
         if isinstance(type_spec, str) and re.fullmatch('typedef@(?P<type_name>[^ ]*)', type_spec):
             self.ref_count = parser.typedef_type.ref_count
             self.type_spec = parser.typedef_type._type
@@ -1933,7 +1946,8 @@ class CompoundStmt(Statement):
             else:
                 self.nextlist = getattr(self.stmt_list[-1], 'nextlist', [])
         
-        symtable.update_scope_size()
+        symtable.pop_scope()
+        # symtable.update_scope_size()
     
     @staticmethod
     def _gen_dot(obj):

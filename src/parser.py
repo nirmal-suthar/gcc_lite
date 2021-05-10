@@ -397,7 +397,10 @@ def p_declaration_specifiers(p):
         if isinstance(p[1], StructUnionSpecifier):
             parser.type = p[1].get_struct_type()
         else:
-            parser.type = p[1]
+            if re.fullmatch('typedef@(?P<type_name>[^ ]*)', p[1]):
+                parser.type = parser.typedef_type
+            else:
+                parser.type = p[1]
         parser.is_typedef = False
         parser.is_static = False
     else:
