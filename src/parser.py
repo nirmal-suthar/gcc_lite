@@ -471,6 +471,7 @@ def p_struct_or_union_specifier(p):
         p[0] = StructUnionSpecifier(p[1], decls_list=p[3])
     else:
         p[0] = StructUnionSpecifier(p[1], name=p[2], decls_list=p[4])
+    # comm['struct_kw'] = False
 
 def p_struct_or_union(p):
     ''' struct_or_union : STRUCT

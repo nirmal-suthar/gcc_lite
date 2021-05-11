@@ -240,8 +240,8 @@ class SymbolTable():
             parser_error(f'`{alias}` redeclared as different kind of symbol')
             return
 
-        if cur_scope == self.global_scope and (name in self.function):
-            parser_error(f'`{name}` redeclared as different kind of symbol')
+        if cur_scope == self.global_scope and (alias in self.function):
+            parser_error(f'`{alias}` redeclared as different kind of symbol')
             return
             
         if lookup_alias is None:

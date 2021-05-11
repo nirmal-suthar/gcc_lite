@@ -1,5 +1,6 @@
 #! /usr/bin/env python3
 
+import parser
 from ply import lex
 from ply.lex import TOKEN
 from tabulate import tabulate
@@ -172,13 +173,19 @@ def t_RS_PAREN(t):
     return t
 
 # Identifier
+struct_kw = False
 @TOKEN(r'[a-zA-Z_][0-9a-zA-Z_]*')
 def t_IDENTIFIER(t):
     t.type = keywords.get(t.value, 'IDENTIFIER')
 
-    if t.type == 'IDENTIFIER' and symtable.lookup_alias(t.value):
+    if t.type == 'IDENTIFIER' and not t.lexer.struct_kw and symtable.lookup_alias(t.value):
+        # Do not convert identifier after struct keyword into typename
         t.type = 'TYPE_NAME'
-    
+
+    if t.type == 'STRUCT':
+        t.lexer.struct_kw = True
+    else:
+        t.lexer.struct_kw = False
     return t
 
 # Constants
@@ -233,7 +240,7 @@ def find_column(input, token):
 
 # Build the lexer
 lexer = lex.lex(debug = 0)
-
+lexer.struct_kw = False
 if __name__ == "__main__":
 
     # Build the lexer

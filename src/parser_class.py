@@ -2341,7 +2341,7 @@ class FuncDef(Node):
         if self.vartype.arr_offset is None:
             self.vartype.arr_offset = self.specifier.arr_offset
         else:
-            self.vartype.arr_offset = self.specifier.arr_offset + vartype.arr_offset
+            self.vartype.arr_offset = self.specifier.arr_offset + self.vartype.arr_offset
         
         symtable.add_func(Function(self.vartype, self.name, self.param_list, is_declared=True))
 
