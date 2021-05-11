@@ -37,32 +37,18 @@ class _BASENODE:
         """Get a list of node and edge declarations."""
 
         dot_list = []
+        FILTERED_LIST = [None, "", []]
 
         if isinstance(obj, (str, int, float, tuple, dict)):
             dot_list.append(obj)
+
         elif isinstance(obj, _BASENODE):
             dot_list.append(repr(obj.__class__.__name__))
-        elif isinstance(obj, list):
-            # dot_list.append('List')
-            pass
-        else:
-            raise Exception('Invalid type {}'.format(type(obj)))
-        
-        if isinstance(obj, list):
-            # Avoid None child node, empty strings, and empty lists
-            FILTERED_LIST = [None, "", []]    
-
-            for child in filter(lambda x: not x in FILTERED_LIST, obj):
-                _gen_dot_func = child._gen_dot if isinstance(child, _BASENODE) else _BASENODE._gen_dot
-                dot_list.append(_gen_dot_func(child))                
-
-        elif isinstance(obj, _BASENODE):
+            
             for attr in obj.__dict__:
                 child = getattr(obj, attr)
                 if (
-                    child is None
-                    or child == ""
-                    or child == []
+                    child in FILTERED_LIST
                     or attr in obj.attr_ignore
                 ):
                     continue
@@ -79,7 +65,16 @@ class _BASENODE:
                 #     dot_list.append(child_list[0])
                 # else:
                 #     dot_list.append(child_list)
-                
+
+        elif isinstance(obj, list):
+            # dot_list.append('List')
+            for child in filter(lambda x: not x in FILTERED_LIST, obj):
+                _gen_dot_func = child._gen_dot if isinstance(child, _BASENODE) else _BASENODE._gen_dot
+                dot_list.append(_gen_dot_func(child)) 
+            pass
+        
+        else:
+            raise Exception('Invalid type {}'.format(type(obj)))
         return dot_list
 
 # #############################################################################
@@ -185,9 +180,6 @@ class VarType(_BASENODE):
         self.is_tmp = False
 
     def get_size(self) -> int:
-        # _size = self._get_size()
-        # aligned_size = ((_size+ALIGN_BYTES-1)>>ALIGN_SHIFT)<<ALIGN_SHIFT 
-        # return aligned_size
         return self._get_size()
 
     def _get_size(self) -> int:
@@ -639,18 +631,18 @@ class OpExpr(BaseExpr):
                     inferred_type = 'int'
                     ref_count = 0
                 else:
-                    compilation_err.append('Type not compatible with ops {}'.format(self.ops))
-                    parser.error = compilation_err[-1]
-                    parser_error()
+                    parser_error('Type not compatible with ops {}'.format(self.ops))
+                    # compilation_err.append('Type not compatible with ops {}'.format(self.ops))
+                    # parser.error = compilation_err[-1]
+                    # parser_error()
             # lhs is pointer and rhs is int => pointer add and sub
             else:
                 if self.rhs.expr_type._type == 'int' or self.rhs.expr_type._type == 'char':
                     inferred_type = self.lhs.expr_type._type
                     ref_count = self.lhs.expr_type.ref_count
                 else:
-                    compilation_err.append('Type not compatible with ops {}'.format(self.ops))
-                    parser.error = compilation_err[-1]
-                    parser_error()
+                    parser_error('Type not compatible with ops {}'.format(self.ops))
+                    
         # if lhs is not pointer
         else:
             # lhs is int and rhs is pointer
@@ -660,13 +652,11 @@ class OpExpr(BaseExpr):
                         inferred_type = self.rhs.expr_type._type
                         ref_count = self.rhs.expr_type.ref_count
                     else:
-                        compilation_err.append('Type not compatible with ops {}'.format(self.ops))
-                        parser.error = compilation_err[-1]
-                        parser_error()
+                        parser_error('Type not compatible with ops {}'.format(self.ops))
+                        
                 else:
-                    compilation_err.append('Type not compatible with ops {}'.format(self.ops))
-                    parser.error = compilation_err[-1]
-                    parser_error()
+                    parser_error('Type not compatible with ops {}'.format(self.ops))
+                    
             # if lhs and rhs are both NOT pointer
             else:
                 if self.rhs.expr_type._type == self.lhs.expr_type._type:
@@ -674,9 +664,8 @@ class OpExpr(BaseExpr):
                         inferred_type = self.lhs.expr_type._type
                         ref_count = self.lhs.expr_type.ref_count
                     else:
-                        compilation_err.append('Type not compatible with ops {}'.format(self.ops))
-                        parser.error = compilation_err[-1]
-                        parser_error()
+                        parser_error('Type not compatible with ops {}'.format(self.ops))
+                        
                 else:
                     if self.rhs.expr_type._type in self.ops_type[self.ops]:
                         if self.lhs.expr_type._type in self.ops_type[self.ops]:
@@ -845,17 +834,13 @@ class UnaryExpr(OpExpr):
 
             else:
                 if self.ops in ['-', '+']:
-                    compilation_err.append('wrong type argument to unary minus')
-                    parser.error = compilation_err[-1]
-                    parser_error()
+                    parser_error('wrong type argument to unary minus')
                 inferred_type = self.rhs.expr_type._type
                 ref_count = self.rhs.expr_type.ref_count
         # bool ops
         elif self.ops in ['!', '~']:
             if self.rhs.expr_type._type not in self.ops_type[self.ops]:
-                compilation_err.append('Type not compatible with ops {}'.format(self.ops)) 
-                parser.error = compilation_err[-1]
-                parser_error()
+                parser_error('Type not compatible with ops {}'.format(self.ops))
             
             inferred_type = 'int'
             ref_count = 0
@@ -865,9 +850,7 @@ class UnaryExpr(OpExpr):
                 inferred_type = self.rhs.expr_type._type
                 ref_count = self.rhs.expr_type.ref_count - 1
             else:
-                compilation_err.append('Can not dereference a non pointer') 
-                parser.error = compilation_err[-1]
-                parser_error()
+                parser_error('Can not dereference a non pointer')
         elif self.ops == '&':
             # if not isinstance(self.rhs, Identifier) and \
             #     (not (isinstance(self.rhs, PostfixExpr) and self.rhs.ops in ['.', '->'])) and \
@@ -1038,19 +1021,14 @@ class PostfixExpr(OpExpr):
                 if self.lhs.expr_type._type.is_defined():
                     struct_var = self.lhs.expr_type._type.variables.get(self.rhs, None)
                     if struct_var is None:
-                        compilation_err.append('{} has no member named {}'.format(self.lhs.expr_type._type.name, self.rhs))
-                        parser.error = compilation_err[-1]
-                        parser_error()
+                        parser_error('{} has no member named {}'.format(self.lhs.expr_type._type.name, self.rhs))
                     inferred_type = struct_var._type
                     ref_count = struct_var.ref_count
                 else:
-                    compilation_err.append('Incomplete struct {}'.format(self.lhs.expr_type._type.name))
-                    parser.error = compilation_err[-1]
-                    parser_error()
+                    parser_error('Incomplete struct {}'.format(self.lhs.expr_type._type.name))
             else:
-                compilation_err.append('Dereferencing invalid struct type')
-                parser.error = compilation_err[-1]
-                parser_error()
+                parser_error('Dereferencing invalid struct type')
+
         # struct deferencing child
         elif self.ops == '->':
             if self.lhs.expr_type.ref_count == 1 and isinstance(self.lhs.expr_type._type, StructType):
@@ -1058,19 +1036,13 @@ class PostfixExpr(OpExpr):
                     # print(self.lhs.expr_type)
                     struct_var = self.lhs.expr_type._type.variables.get(self.rhs, None)
                     if struct_var is None:
-                        compilation_err.append('{} has no member named {}'.format(self.lhs.expr_type._type.name, self.rhs))
-                        parser.error = compilation_err[-1]
-                        parser_error()
+                        parser_error('{} has no member named {}'.format(self.lhs.expr_type._type.name, self.rhs))
                     inferred_type = struct_var._type
                     ref_count = struct_var.ref_count
                 else:
-                    compilation_err.append('Incomplete struct {}'.format(self.lhs.expr_type._type.name))
-                    parser.error = compilation_err[-1]
-                    parser_error()
+                    parser_error('Incomplete struct {}'.format(self.lhs.expr_type._type.name))
             else:
-                compilation_err.append('Dereferencing invalid struct type')
-                parser.error = compilation_err[-1]
-                parser_error()
+                parser_error('Dereferencing invalid struct type')
         # function calling
         elif self.ops == '(':
             arg_list = [] if self.rhs is None else self.rhs
@@ -1079,9 +1051,7 @@ class PostfixExpr(OpExpr):
             if isinstance(_var, Function):
                 func = self.lhs = _var
                 if func is None:
-                    compilation_err.append('{} is not callable'.format(self.lhs))
-                    parser.error = compilation_err[-1]
-                    parser_error()
+                    parser_error('{} is not callable'.format(self.lhs))
 
                 if func.name in ['printf', 'scanf']:
                     if len(arg_list) < 1:
@@ -1126,13 +1096,9 @@ class PostfixExpr(OpExpr):
                     else:
                         ref_count = self.lhs.expr_type.ref_count - 1
                 else:
-                    compilation_err.append('Subscripted value is neither array nor pointer')
-                    parser.error = compilation_err[-1]
-                    parser_error()
+                    parser_error('Subscripted value is neither array nor pointer')
             else:
-                compilation_err.append('Array subscript is not an integer')
-                parser.error = compilation_err[-1]
-                parser_error()
+                parser_error('Array subscript is not an integer')
         
         self.expr_type = VarType(ref_count, inferred_type, arr_offset)
             
@@ -1378,17 +1344,13 @@ class InitDeclarator(_BaseDecl):
                         self.initializer = CastExpr(self.expr_type, self.initializer)
                 else:
                     if self.initializer.expr_type._type == 'float':
-                        compilation_err.append('Can not assign float to pointer')
-                        parser.error = compilation_err[-1]
-                        parser_error()
+                        parser_error('Can not assign float to pointer')
                     else:
                         self.initializer = CastExpr(self.expr_type, self.initializer)
             else:
                 if self.expr_type.ref_count + len(self.expr_type.arr_offset) == 0:
                     if self.expr_type._type == 'float':
-                        compilation_err.append('Can not typecast pointer to float')
-                        parser.error = compilation_err[-1]
-                        parser_error()
+                        parser_error('Can not typecast pointer to float')
                     else:
                         self.initializer = CastExpr(self.expr_type, self.initializer)
                 else:
