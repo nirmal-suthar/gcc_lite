@@ -18,10 +18,6 @@ ALIGN_BYTES = 4
 def binary(num):
     return hex(struct.unpack('<I', struct.pack('<f', num))[0])
 
-def error_helper(msg):
-    compilation_err.append(msg)
-    parser.error = compilation_err[-1]
-    parser_error()
 # #############################################################################
 # Misc.            
 # #############################################################################
@@ -635,7 +631,7 @@ class OpExpr(BaseExpr):
                     inferred_type = 'int'
                     ref_count = 0
                 else:
-                    error_helper('Type not compatible with ops {}'.format(self.ops))
+                    parser_error('Type not compatible with ops {}'.format(self.ops))
                     # compilation_err.append('Type not compatible with ops {}'.format(self.ops))
                     # parser.error = compilation_err[-1]
                     # parser_error()
@@ -645,10 +641,8 @@ class OpExpr(BaseExpr):
                     inferred_type = self.lhs.expr_type._type
                     ref_count = self.lhs.expr_type.ref_count
                 else:
-                    error_helper('Type not compatible with ops {}'.format(self.ops))
-                    # compilation_err.append('Type not compatible with ops {}'.format(self.ops))
-                    # parser.error = compilation_err[-1]
-                    # parser_error()
+                    parser_error('Type not compatible with ops {}'.format(self.ops))
+                    
         # if lhs is not pointer
         else:
             # lhs is int and rhs is pointer
@@ -658,15 +652,11 @@ class OpExpr(BaseExpr):
                         inferred_type = self.rhs.expr_type._type
                         ref_count = self.rhs.expr_type.ref_count
                     else:
-                        error_helper('Type not compatible with ops {}'.format(self.ops))
-                        # compilation_err.append('Type not compatible with ops {}'.format(self.ops))
-                        # parser.error = compilation_err[-1]
-                        # parser_error()
+                        parser_error('Type not compatible with ops {}'.format(self.ops))
+                        
                 else:
-                    error_helper('Type not compatible with ops {}'.format(self.ops))
-                    # compilation_err.append('Type not compatible with ops {}'.format(self.ops))
-                    # parser.error = compilation_err[-1]
-                    # parser_error()
+                    parser_error('Type not compatible with ops {}'.format(self.ops))
+                    
             # if lhs and rhs are both NOT pointer
             else:
                 if self.rhs.expr_type._type == self.lhs.expr_type._type:
@@ -674,10 +664,8 @@ class OpExpr(BaseExpr):
                         inferred_type = self.lhs.expr_type._type
                         ref_count = self.lhs.expr_type.ref_count
                     else:
-                        error_helper('Type not compatible with ops {}'.format(self.ops))
-                        # compilation_err.append('Type not compatible with ops {}'.format(self.ops))
-                        # parser.error = compilation_err[-1]
-                        # parser_error()
+                        parser_error('Type not compatible with ops {}'.format(self.ops))
+                        
                 else:
                     if self.rhs.expr_type._type in self.ops_type[self.ops]:
                         if self.lhs.expr_type._type in self.ops_type[self.ops]:
@@ -846,13 +834,13 @@ class UnaryExpr(OpExpr):
 
             else:
                 if self.ops in ['-', '+']:
-                    error_helper('wrong type argument to unary minus')
+                    parser_error('wrong type argument to unary minus')
                 inferred_type = self.rhs.expr_type._type
                 ref_count = self.rhs.expr_type.ref_count
         # bool ops
         elif self.ops in ['!', '~']:
             if self.rhs.expr_type._type not in self.ops_type[self.ops]:
-                error_helper('Type not compatible with ops {}'.format(self.ops))
+                parser_error('Type not compatible with ops {}'.format(self.ops))
             
             inferred_type = 'int'
             ref_count = 0
@@ -862,7 +850,7 @@ class UnaryExpr(OpExpr):
                 inferred_type = self.rhs.expr_type._type
                 ref_count = self.rhs.expr_type.ref_count - 1
             else:
-                error_helper('Can not dereference a non pointer')
+                parser_error('Can not dereference a non pointer')
         elif self.ops == '&':
             # if not isinstance(self.rhs, Identifier) and \
             #     (not (isinstance(self.rhs, PostfixExpr) and self.rhs.ops in ['.', '->'])) and \
@@ -1033,13 +1021,13 @@ class PostfixExpr(OpExpr):
                 if self.lhs.expr_type._type.is_defined():
                     struct_var = self.lhs.expr_type._type.variables.get(self.rhs, None)
                     if struct_var is None:
-                        error_helper('{} has no member named {}'.format(self.lhs.expr_type._type.name, self.rhs))
+                        parser_error('{} has no member named {}'.format(self.lhs.expr_type._type.name, self.rhs))
                     inferred_type = struct_var._type
                     ref_count = struct_var.ref_count
                 else:
-                    error_helper('Incomplete struct {}'.format(self.lhs.expr_type._type.name))
+                    parser_error('Incomplete struct {}'.format(self.lhs.expr_type._type.name))
             else:
-                error_helper('Dereferencing invalid struct type')
+                parser_error('Dereferencing invalid struct type')
 
         # struct deferencing child
         elif self.ops == '->':
@@ -1048,13 +1036,13 @@ class PostfixExpr(OpExpr):
                     # print(self.lhs.expr_type)
                     struct_var = self.lhs.expr_type._type.variables.get(self.rhs, None)
                     if struct_var is None:
-                        error_helper('{} has no member named {}'.format(self.lhs.expr_type._type.name, self.rhs))
+                        parser_error('{} has no member named {}'.format(self.lhs.expr_type._type.name, self.rhs))
                     inferred_type = struct_var._type
                     ref_count = struct_var.ref_count
                 else:
-                    error_helper('Incomplete struct {}'.format(self.lhs.expr_type._type.name))
+                    parser_error('Incomplete struct {}'.format(self.lhs.expr_type._type.name))
             else:
-                error_helper('Dereferencing invalid struct type')
+                parser_error('Dereferencing invalid struct type')
         # function calling
         elif self.ops == '(':
             arg_list = [] if self.rhs is None else self.rhs
@@ -1063,7 +1051,7 @@ class PostfixExpr(OpExpr):
             if isinstance(_var, Function):
                 func = self.lhs = _var
                 if func is None:
-                    error_helper('{} is not callable'.format(self.lhs))
+                    parser_error('{} is not callable'.format(self.lhs))
 
                 if func.name in ['printf', 'scanf']:
                     if len(arg_list) < 1:
@@ -1108,9 +1096,9 @@ class PostfixExpr(OpExpr):
                     else:
                         ref_count = self.lhs.expr_type.ref_count - 1
                 else:
-                    error_helper('Subscripted value is neither array nor pointer')
+                    parser_error('Subscripted value is neither array nor pointer')
             else:
-                error_helper('Array subscript is not an integer')
+                parser_error('Array subscript is not an integer')
         
         self.expr_type = VarType(ref_count, inferred_type, arr_offset)
             
@@ -1356,13 +1344,13 @@ class InitDeclarator(_BaseDecl):
                         self.initializer = CastExpr(self.expr_type, self.initializer)
                 else:
                     if self.initializer.expr_type._type == 'float':
-                        error_helper('Can not assign float to pointer')
+                        parser_error('Can not assign float to pointer')
                     else:
                         self.initializer = CastExpr(self.expr_type, self.initializer)
             else:
                 if self.expr_type.ref_count + len(self.expr_type.arr_offset) == 0:
                     if self.expr_type._type == 'float':
-                        error_helper('Can not typecast pointer to float')
+                        parser_error('Can not typecast pointer to float')
                     else:
                         self.initializer = CastExpr(self.expr_type, self.initializer)
                 else:
