@@ -5,6 +5,11 @@ int scanf(char *s);
 void strcpy(char *d, char *s);
 void* memcpy(void* d, void* s, int cnt);
 
+int open(char* filename, int flags);
+int close(int fd);
+int read(int fd, char* buf, int size);
+int write(int fd, char* buf, int size);
+
 float sinf(float x);
 float cosf(float x);
 float tanf(float x);
@@ -38,6 +43,22 @@ int scanint(){
 
 void * bufcpy(void * dest, void* src, int cnt){
     return memcpy(dest, src, cnt);
+}
+
+
+int fopen(char* filename, int flags){
+    return open(filename, flags);
+}
+
+int fwrite(int fd, char* buf, int size){
+    return write(fd, buf, size);
+}
+int fclose(int fd){
+    return close(fd);
+}
+
+int fread(int fd, char* buf,int size){
+    return read(fd, buf, size);
 }
 
 float fsin(float x){
