@@ -1,16 +1,16 @@
-int fcreate(int f);
-int fopen(int f);
-int fwrite(int f, int m);
+int fcreate(char* f);
+int fopen(char* f);
+int fwrite(int f, char* m);
 int fclose(int f);
 int fread(int f, int len);
 
 int main()
 {
-    int file_name = "a.txt";
+    char* file_name = "a.txt";
 
     int fd_out = fcreate(file_name);
 
-    int msg = "hello world";
+    char* msg = "hello world";
 
     fwrite(fd_out, msg);
 

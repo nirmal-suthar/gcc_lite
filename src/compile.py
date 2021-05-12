@@ -7,7 +7,8 @@ from parser import parser, lexer
 from helper import symtable, tac
 from codegen import AssemblyGen
 from lib import stdlib
-
+import os
+import sys
 
 def arg_parser():
 
@@ -75,6 +76,10 @@ if __name__ == "__main__":
 
     graph.write_raw(args.out)
     print('DOT file "{}" generated.'.format(args.out))
+
+    os.system(f"nasm -f elf32 {args.out.split('.')[-2] + '.s'}")
+    os.system("gcc -m32  {args.out.split('.')[-2] + '.o'} ./fileio.o")
+    print("Run ./a.out for execution")
 
     if args.png:
         graph.write_png(png_file)
