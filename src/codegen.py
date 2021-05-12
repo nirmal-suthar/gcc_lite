@@ -514,6 +514,20 @@ class AssemblyGen:
             else:
                 self.add(f'ret ')
         
+        elif code.instr == 'CallSeqBegin':
+            self.add(f'push %ebx')
+            self.add(f'push %ecx')
+            self.add(f'push %edx')
+            self.add(f'push %esi')
+            self.add(f'push %edi')
+            
+        elif code.instr == 'CallSeqEnd':
+            self.add(f'pop %edi')
+            self.add(f'pop %esi')
+            self.add(f'pop %edx')
+            self.add(f'pop %ecx')
+            self.add(f'pop %ebx')
+        
         elif code.instr == 'spill all':
             self.spillallregs()
         else:
@@ -848,12 +862,3 @@ class AssemblyGen:
                     f.write("" + instr + "\n")
                 else:
                     f.write("\t" + instr + "\n")
-
-
-
-reg_no = {'ebx':0,'ecx':1, 'esi':2,  'edi':3, 'eax':4, 'edx':5}
-reg_name =  {value:key for key, value in reg_no.items()}
-neg_relop = {"==":"!=", "!=":"==", "<=": ">", "<": ">=", ">=": "<", ">=": "<"}
-allocated = [0]*6
-reloplatest=0 #used to store info for compare and jump
-curr_procedure = ['empty','main']

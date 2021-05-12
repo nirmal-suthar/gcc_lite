@@ -8,7 +8,7 @@ ALIGN_SHIFT = 2 # all offset should be 2^2 = 4 bytes aligned (32 bit machine)
 ALIGN_BYTES = 4
 
 class ScopeTable:
-    def __init__(self, scope_depth=0, parent=None, scope_id=0, scope_type='Other'):
+    def __init__(self, scope_depth=0, parent=None, scope_id=0, scope_type='Other', func=None):
         self.scope_id = scope_id        # scope id
         self.scope_depth = scope_depth  # scope depth
         self.parent = parent            # parent scopeTable
@@ -19,6 +19,7 @@ class ScopeTable:
         self.size = 0
         self.child_max_size = 0
         self.param_size = 0
+        self.func = func #stores func object
 
     def get_size(self):
         _size = self.size + self.child_max_size
@@ -114,6 +115,14 @@ class SymbolTable():
             scope = scope.parent
         return False
     
+    def get_func_scope(self):
+        scope = self.cur_scope()
+        while scope:
+            if scope.metadata in ['Function']:
+                return scope
+            scope = scope.parent
+        return None
+    
     def check_case_scope(self):
         # if immediate scope is Switch case then good,
         # else throw error
@@ -121,12 +130,12 @@ class SymbolTable():
             return True
         return False
 
-    def push_scope(self, scope_type='Other', exists=False) -> None:
+    def push_scope(self, scope_type='Other', exists=False, func=None) -> None:
         if exists:
             self.scope_stack.append(self.all_scope[self.tac_scope_idx + 1])
             self.tac_scope_idx += 1
             return
-        new_scope = ScopeTable(self.cur_depth(), self.scope_stack[-1], len(self.all_scope), scope_type)
+        new_scope = ScopeTable(self.cur_depth(), self.scope_stack[-1], len(self.all_scope), scope_type, func=func)
         self.all_scope.append(new_scope)
         self.scope_stack.append(new_scope)
 
@@ -402,6 +411,12 @@ class Instr:
         elif m := re.fullmatch('FuncEnd (?P<e1>[^ ]*)', code):
             self.instr = 'FuncEnd'
             self.e1 = m.group('e1')
+
+        elif m := re.fullmatch('CallSeqBegin', code):
+            self.instr = 'CallSeqBegin'
+
+        elif m := re.fullmatch('CallSeqEnd', code):
+            self.instr = 'CallSeqEnd'
 
         elif m := re.fullmatch('printf (?P<e1>[^ ]*) (?P<e2>[^ ]*)', code):
             self.instr = 'printf'

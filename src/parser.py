@@ -54,9 +54,9 @@ def p_push_scope(p):
     if isinstance(p[-2], ScopeName):
         symtable.push_scope(p[-2].name)
     elif isinstance(p[-2], tuple):
-        symtable.push_scope('Function')
         _, _, func_name, args = p[-2]
         func = symtable.lookup_func(func_name)
+        symtable.push_scope('Function', func=func)
         func.scope_id = len(symtable.all_scope)-1
 
         if func.ret_type.is_struct_type():

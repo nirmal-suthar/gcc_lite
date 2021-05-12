@@ -1,4 +1,3 @@
-
 stdlib = '''
 int printf(char *s);
 int scanf(char *s);
@@ -38,44 +37,44 @@ int scanint(){
 void * bufcpy(void * dest, void* src, int cnt){
     return memcpy(dest, src, cnt);
 }
-
-float fsin(float x){
-    return sinf(x)
-}
-
-float fcos(float x){
-    return cosf(x)
-}
-
-float ftan(float x){
-    return tanf(x)
-}
-
-float fsininv(float x){
-    return asinf(x)
-}
-
-float fcosinv(float x){
-    return acosf(x)
-}
-
-float ftaninv(float x){
-    return atanf(x)
-}
-
-float flog(float x){
-    return logf(x)
-}
-
-float fexp(float x){
-    return expf(x)
-}
-
-float fsqrt(float x){
-    return sqrtf(x)
-}
-
-float fpow(float base, float power){
-    return powf(base, power)
-}
 '''
+# float fsin(float x){
+#     return sinf(x);
+# }
+
+# float fcos(float x){
+#     return cosf(x);
+# }
+
+# float ftan(float x){
+#     return tanf(x);
+# }
+
+# float fsininv(float x){
+#     return asinf(x);
+# }
+
+# float fcosinv(float x){
+#     return acosf(x);
+# }
+
+# float ftaninv(float x){
+#     return atanf(x);
+# }
+
+# float flog(float x){
+#     return logf(x);
+# }
+
+# float fexp(float x){
+#     return expf(x);
+# }
+
+# float fsqrt(float x){
+#     return sqrtf(x);
+# }
+
+# float fpow(float base, float power){
+#     return powf(base, power);
+# }
+# '''

@@ -955,28 +955,26 @@ class PostfixExpr(OpExpr):
         elif self.ops == '(':
             # stdio function (special as it contain variable number of args)
             if self.lhs.name in ['printf', 'scanf']:
+                
 
                 # generate code for parameters other than first one
-                for param in self.rhs[1:]:
+                for param in self.rhs:
                     param.gen()
                     tac.backpatch(getattr(param, 'nextlist', []), tac.nextquad())
 
                 args_size = 0
+                tac.emit(f'CallSeqBegin')
 
                 # push parameters other than the first one
-                for param in reversed(self.rhs[1:]):
+                for param in reversed(self.rhs):
                     args_size += param.expr_type.get_size()
                     tac.emit(f"param {param.place}")
 
-                # add 4bytes for fmt_string
-                args_size += 4
-                fmt_sym = tac.fmt_string()
-                symtable.add_fmt(fmt_sym, self.rhs[0].const)
-                tac.emit(f'param ${fmt_sym}')
-
                 # call the function
                 tac.emit(f"{self.lhs.name} {args_size} {self.place}")
-            
+
+                tac.emit(f'CallSeqEnd')
+
             # standard function call
             else:
                 args = [] if self.rhs is None else self.rhs
@@ -995,6 +993,8 @@ class PostfixExpr(OpExpr):
                     symtable.add_var(pret_var, self.expr_type.get_pointer_type())
                     tac.emit(f"{pret_var} = & {ret_var}")
 
+                tac.emit(f'CallSeqBegin')
+
                 # push parameters 
                 for param in reversed(args):
                     tac.emit(f"param {param.place}")
@@ -1004,6 +1004,9 @@ class PostfixExpr(OpExpr):
 
                 # call the function
                 tac.emit(f"call {self.lhs.name} {self.place}")
+                
+                tac.emit(f'CallSeqEnd')
+                
         elif self.ops in ['.', '->']:
             self.lhs.gen()
             tac.backpatch(getattr(self.lhs, 'nextlist', []), tac.nextquad())
@@ -2211,13 +2214,19 @@ class JumpStmt(Statement):
         elif self.jump_type == 'continue':
             if not symtable.check_continue_scope():
                 parser_error('`continue` statement not within a loop')
-        # elif self.jump_type == 'return':
-        #     if self.expr.expr_type != (function_type):
-        #         parser_error('')
-        # # check the return type with function scope
-        # i
+        elif self.jump_type == 'return':
 
-
+            func_scope = symtable.get_func_scope()
+            if func_scope is not None and func_scope.func is not None:
+                
+                func = func_scope.func
+                if not self.expr.expr_type.castable_to(func.ret_type):
+                    parser_error(f'incompatible types when returning type `{self.expr.expr_type}` but `{func.ret_type}` was expected')
+                else:
+                    self.expr = CastExpr.get_cast(func.ret_type, self.expr)
+            else:
+                parser_error('`return` statement not within a function')
+            
     def gen(self):
         if self.jump_type == 'continue':
             self.continuelist = [tac.nextquad()]
