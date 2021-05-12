@@ -3,12 +3,9 @@ from parser import parser_error
 import re
 import copy
 
-# def parser_error(error_str=None):
-#     parser.compilation_err = True
-#     print(bcolors.BOLD+'{}:{}:'.format(lexer.filename,lexer.lineno)+bcolors.ENDC,end='')
-#     print(bcolors.FAIL+' SyntaxError: '+bcolors.ENDC,parser.error)
-#     print('     {} |{}'.format(lexer.lineno,lexer.lines[lexer.lineno - 1]))
 ADDR_SIZE = 4
+ALIGN_SHIFT = 2 # all offset should be 2^2 = 4 bytes aligned (32 bit machine)
+ALIGN_BYTES = 4
 
 class ScopeTable:
     def __init__(self, scope_depth=0, parent=None, scope_id=0, scope_type='Other'):

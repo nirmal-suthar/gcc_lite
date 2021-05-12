@@ -1,6 +1,5 @@
 #! /usr/bin/env python3
 
-import parser
 from ply import lex
 from ply.lex import TOKEN
 from tabulate import tabulate
