@@ -246,7 +246,12 @@ class AssemblyGen:
         # self.add("\textern fcreate1")
         # self.add("\textern fwrite2")
         # self.add("\textern fclose1")
+        # self.add("\textern fopen1")fcreate1")
+        # self.add("\textern fwrite2")
+        # self.add("\textern fclose1")
         # self.add("\textern fopen1")
+        # self.add("\textern fread2")
+
         # self.add("\textern fread2")
 
         # start traversing the IR (one function at a time!)
