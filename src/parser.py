@@ -58,6 +58,11 @@ def p_push_scope(p):
         _, _, func_name, args = p[-2]
         func = symtable.lookup_func(func_name)
         func.scope_id = len(symtable.all_scope)-1
+
+        if func.ret_type.is_struct_type():
+            # return address of struct is stored in ret@ symbol
+            symtable.add_var("ret@", func.ret_type.get_pointer_type(), is_param=True)
+
         for name, _type in args:
             symtable.add_var(name, _type, is_param=True)
     else:
@@ -798,7 +803,7 @@ def p_function_definition(p):
         symtable.add_func(Function(vartype, p[2], p[3]))
     else:
         p[0] = (p[1], p[2], p[3], p[4])
-        vartype = VarType(p[1], p[2].type_spec)    
+        vartype = VarType(p[2], p[1].type_spec)    
         symtable.add_func(Function(vartype, p[3], p[4]))
 
 from lexer import lexer, tokens

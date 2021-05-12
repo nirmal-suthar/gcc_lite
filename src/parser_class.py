@@ -139,7 +139,23 @@ class StructType(_BASENODE):
     
     def get_element_type(self, name):
         return self.variables[name]
-    
+
+    def __eq__(self, other):
+        if not isinstance(other, StructType):
+            return False
+
+        if self.name != other.name:
+            return False
+
+        if len(self.variables) != len(other.variables):
+            return False
+
+        for key1, key2 in zip(self.variables, other.variables):
+            if key1 != key2:
+                return False
+            if self.variables[key1] != other.variables[key2]:
+                return False
+        return True    
 
 class Function(_BASENODE):
     def __init__(self, ret_type, name, args, is_declared=False):
@@ -148,12 +164,14 @@ class Function(_BASENODE):
         self.name = name                # str
         self.args = args                # list
         self.is_declared = is_declared  # declaration or definition 
+        self.scope_id = 0               # scope id of function
     
     def param_size(self):
         size = 0
         for name, vartype in self.args:
             size += vartype.get_size()
-        return size
+        aligned_size = ((size+ALIGN_BYTES-1)>>ALIGN_SHIFT)<<ALIGN_SHIFT 
+        return aligned_size
         
     def __eq__(self, other):
         # is_declared is not checked
@@ -968,9 +986,21 @@ class PostfixExpr(OpExpr):
                     param.gen()
                     tac.backpatch(getattr(param, 'nextlist', []), tac.nextquad())
 
+                # if return type is struct
+                if self.expr_type.is_struct_type():
+                    ret_var = tac.newtmp()
+                    symtable.add_var(ret_var, self.expr_type, ret_var=True)
+
+                    pret_var = tac.newtmp()
+                    symtable.add_var(pret_var, self.expr_type.get_pointer_type())
+                    tac.emit(f"{pret_var} = & {ret_var}")
+
                 # push parameters 
                 for param in reversed(args):
                     tac.emit(f"param {param.place}")
+
+                if self.expr_type.is_struct_type():
+                    tac.emit(f"param {pret_var}")
 
                 # call the function
                 tac.emit(f"call {self.lhs.name} {self.place}")
@@ -1071,7 +1101,9 @@ class PostfixExpr(OpExpr):
                         casted_args = []
                         for i, (arg, (_,expected)) in enumerate(zip(arg_list, func.args)):
                             given = arg.expr_type
-                            if expected.get_caste_type(given) is None:
+                            # if expected.get_caste_type(given) is None:
+                            if not given.castable_to(expected):
+                                # print(expected, given)
                                 parser_error(f'incompatible type for argument {i+1} of `{func.name}`')
                             else:
                                 casted_args.append(CastExpr.get_cast(expected, arg))
@@ -1183,47 +1215,26 @@ class AssignExpr(OpExpr):
         self.place = tac.newtmp()
         symtable.add_var(self.place, self.expr_type)
 
-        if isinstance(self.lhs, UnaryExpr) and self.lhs.ops == '*':
-            self.lhs.rhs.gen()
-            tac.backpatch(getattr(self.lhs.rhs, 'nextlist', []), tac.nextquad())
-            
-            self.rhs.gen()
-            tac.backpatch(getattr(self.rhs, 'nextlist', []), tac.nextquad())
-            
-            tac.emit(f"* {self.lhs.rhs.place} = {self.rhs.place}")
-        elif isinstance(self.lhs, PostfixExpr) and self.lhs.ops == '[':
-            self.lhs.lhs.gen()
-            tac.backpatch(getattr(self.lhs.lhs, 'nextlist', []), tac.nextquad())
-            
-            self.lhs.rhs.gen()
-            tac.backpatch(getattr(self.lhs.rhs, 'nextlist', []), tac.nextquad())
+        self.lhs.gen(lvalue=True)
+        tac.backpatch(getattr(self.lhs, 'nextlist', []), tac.nextquad())
 
-            self.rhs.gen()
-            tac.backpatch(getattr(self.rhs, 'nextlist', []), tac.nextquad())
-            
-            tmpvar = tac.newtmp()
-            symtable.add_var(tmpvar, self.lhs.rhs.expr_type)
-            tac.emit(f"{tmpvar} = {self.lhs.rhs.place} int* ${self.lhs.lhs.expr_type.get_ref_size()}")
-            
-            tac.emit(f"{self.lhs.lhs.place} [ {tmpvar} ] = {self.rhs.place}")
-        elif isinstance(self.lhs, PostfixExpr) and self.lhs.ops in ['.', '->']:
-            # we need self.lhs as lhs of '=' => it should be addr of some memory location which 
-            # '=' will update
-            self.lhs.gen(lvalue=True)
-            tac.backpatch(getattr(self.lhs, 'nextlist', []), tac.nextquad())
+        self.rhs.gen()
+        tac.backpatch(getattr(self.rhs, 'nextlist', []), tac.nextquad())
 
-            self.rhs.gen()
-            tac.backpatch(getattr(self.rhs, 'nextlist', []), tac.nextquad())
-
-            tac.emit(f"* {self.lhs.place} = {self.rhs.place}")
+        # tac.emit(f"* {self.lhs.place} = {self.rhs.place}")
+        if self.expr_type.is_struct_type():
+            tmpsrc = tac.newtmp()
+            symtable.add_var(tmpsrc, self.rhs.expr_type.get_pointer_type())
+            tmpdst = tac.newtmp()
+            symtable.add_var(tmpdst, self.lhs.expr_type.get_pointer_type())
+            tac.emit(f'{tmpsrc} = {self.rhs.place}') # type of tmpsrc and self.rhs.place is different
+            tac.emit(f'{tmpdst} = {self.lhs.place}')
+            tac.emit(f"param ${self.expr_type.get_size()}")
+            tac.emit(f"param {tmpsrc}")
+            tac.emit(f"param {tmpdst}")
+            tac.emit(f"call bufcpy #")
         else:
-            self.lhs.gen()
-            tac.backpatch(getattr(self.lhs, 'nextlist', []), tac.nextquad())
-            
-            self.rhs.gen()
-            tac.backpatch(getattr(self.rhs, 'nextlist', []), tac.nextquad())
-            
-            tac.emit(f"{self.lhs.place} = {self.rhs.place}")
+            tac.emit(f"* {self.lhs.place} = {self.rhs.place}")
         
         tac.emit(f"{self.place} = {self.rhs.place}")
 
@@ -1235,7 +1246,7 @@ class AssignExpr(OpExpr):
             return
         
         if self.ops in ['*=','/=','%=','+=','-=', '<<=', '>>=', '&=', '|=', '^=']:
-            self.rhs = OpExpr(self.lhs, self.ops[:-1], self.rhs)
+            self.rhs = OpExpr(copy.deepcopy(self.lhs), self.ops[:-1], self.rhs)
 
         # compatability is checked in CastExpr
         self.rhs = CastExpr.get_cast(self.lhs.expr_type, self.rhs)
@@ -1316,6 +1327,8 @@ class InitDeclarator(_BaseDecl):
         super().__init__('TODO')
         self.declarator = declarator
         self.initializer = initializer
+        self.is_typedef = parser.is_typedef
+        self.is_static = parser.is_static
 
         if isinstance(parser.type, VarType):
             # declarator is initialized using alias which is stored
@@ -1330,35 +1343,82 @@ class InitDeclarator(_BaseDecl):
         if self.initializer is not None and parser.is_typedef:
             parser_error('can not initialize typedef {}', self.declarator.name)
 
+        if not self.check_semantics():
+            return
+
         if self.initializer is not None:
             
             if isinstance(self.initializer, Initializers):
-                self.initializer.compatible_with(self.expr_type, error=True)
+                if self.initializer.compatible_with(self.expr_type, error=True):
+                    # symtable.add_var(self.declarator.name, self.expr_type, is_static=parser.is_static)
+                    pass
                 return
             
-            if self.initializer.expr_type.ref_count == 0:
-                if self.expr_type.ref_count + len(self.expr_type.arr_offset) == 0:
-                    if self.initializer.expr_type._type == self.expr_type._type:
-                        pass
-                    else:
-                        self.initializer = CastExpr(self.expr_type, self.initializer)
-                else:
-                    if self.initializer.expr_type._type == 'float':
-                        parser_error('Can not assign float to pointer')
-                    else:
-                        self.initializer = CastExpr(self.expr_type, self.initializer)
+            elif isinstance(self.initializer, Const) and self.initializer.expr_type.is_string():
+                if not self.expr_type.is_string():
+                    parser_error(f"Can not assign string to non string symbol {self.declarator.name}")
+                    return
+                # symtable.add_var(self.declarator.name, self.expr_type, is_static=parser.is_static)
             else:
-                if self.expr_type.ref_count + len(self.expr_type.arr_offset) == 0:
-                    if self.expr_type._type == 'float':
-                        parser_error('Can not typecast pointer to float')
-                    else:
-                        self.initializer = CastExpr(self.expr_type, self.initializer)
-                else:
-                    if self.initializer.expr_type.ref_count == self.expr_type.ref_count:
-                        pass
-                    else:
-                        self.initializer = CastExpr(self.expr_type, self.initializer)
-        # dot: print only if initializer is not empty
+                # self.initializer is expression
+                # symtable.add_var(self.declarator.name, self.expr_type, is_static=parser.is_static)
+                self.initializer = AssignExpr(Identifier(self.declarator.name), '=', self.initializer)
+
+    def check_semantics(self, ):
+        if self.initializer != None and symtable.is_global_scope():
+            parser_error(f'cannot initialize global variables')
+            return False
+
+        # storing aliases
+
+        if self.is_typedef:
+            decl = self.declarator
+
+            # Function declaration !
+            if isinstance(decl, FuncDirectDecl):    
+                parser_error('Function typedefs not supported')
+                return False
+
+            vartype = self.expr_type
+            
+            # Sanity checking of arr offset
+            if not all(map(lambda x: isinstance(x, Const) and (x.expr_type.is_int() or x.expr_type.is_char()), decl.arr_offset)):
+                parser_error('Size of array `{}` has non-integer type'.format(decl.name))
+                return False
+
+            # Add declaration in symtab
+            symtable.add_typedef(decl.name, vartype)
+            return True
+        else:
+
+            decl = self.declarator
+
+            # Function declaration !
+            if isinstance(decl, FuncDirectDecl):    
+                vartype = self.expr_type
+                symtable.add_func(Function(vartype, decl.name, decl.param_list))
+                return True
+
+            vartype = self.expr_type
+            
+            # Sanity checking of arr offset
+            if not all(map(lambda x: isinstance(x, Const) and (x.expr_type.is_int() or x.expr_type.is_char()), decl.arr_offset)):
+                parser_error('Size of array `{}` has non-integer type'.format(decl.name))
+                return False
+
+            # Sanity checking of void declartion
+            if self.expr_type._type == 'void' and vartype.ref_count==0:
+                parser_error('Variable `{}` declared void'.format(decl.name))
+                return False
+            
+            # struct declaration checking
+            if self.expr_type.is_struct_type() and not self.expr_type._type.is_defined() and self.expr_type.ref_count==0:
+                parser_error('storage of struct named `{}` not avaiable'.format(self._type.name))
+                return False
+
+            # Add declaration in symtab
+            symtable.add_var(decl.name, vartype, self.is_static)
+        return True
 
     def gen(self):
         if self.initializer is not None:
@@ -1390,7 +1450,7 @@ class InitDeclarator(_BaseDecl):
                 self.initializer.gen()
                 tac.backpatch(getattr(self.initializer, 'nextlist', []), tac.nextquad())
 
-                tac.emit(f"{self.declarator.name} = {self.initializer.place}")
+                # tac.emit(f"{self.declarator.name} = {self.initializer.place}")
         else:
             pass
 
@@ -1570,78 +1630,79 @@ class Declaration(_BaseDecl):
         self.is_struct = isinstance(self._type, StructType)
 
         # storing aliases
-        if self.is_typedef:
-            for init_decl in self.init_list:
-                decl = init_decl.declarator
+        # if self.is_typedef:
+        #     for init_decl in self.init_list:
+        #         decl = init_decl.declarator
 
-                # Function declaration !
-                if isinstance(decl, FuncDirectDecl):    
-                    parser_error('Function typedefs not supported')
-                    continue
+        #         # Function declaration !
+        #         if isinstance(decl, FuncDirectDecl):    
+        #             parser_error('Function typedefs not supported')
+        #             continue
 
-                vartype = VarType(decl.ref_count, self._type, decl.arr_offset)
+        #         vartype = VarType(decl.ref_count, self._type, decl.arr_offset)
                 
-                # for complex typedef like `type_name` -> `int *`, etc
-                vartype.ref_count += self.specifier.ref_count
-                if vartype.arr_offset == None:
-                    vartype.arr_offset = self.specifier.arr_offset
-                else:
-                    vartype.arr_offset = self.specifier.arr_offset + vartype.arr_offset
+        #         # for complex typedef like `type_name` -> `int *`, etc
+        #         vartype.ref_count += self.specifier.ref_count
+        #         if vartype.arr_offset == None:
+        #             vartype.arr_offset = self.specifier.arr_offset
+        #         else:
+        #             vartype.arr_offset = self.specifier.arr_offset + vartype.arr_offset
 
-                # Sanity checking of arr offset
-                if not all(map(lambda x: isinstance(x, Const) and x.dvalue=='int', decl.arr_offset)):
-                    parser_error('Size of array `{}` has non-integer type'.format(decl.name))
+        #         # Sanity checking of arr offset
+        #         if not all(map(lambda x: isinstance(x, Const) and x.dvalue=='int', decl.arr_offset)):
+        #             parser_error('Size of array `{}` has non-integer type'.format(decl.name))
 
-                # TODO: this is valid `typedef void mytype;`
-                # if self.is_void and vartype.ref_count==0:
-                #     compilation_err.append('Variable `{}` declared void'.format(decl.name))
-                #     parser.error = compilation_err[-1]
-                #     parser_error()
+        #         # TODO: this is valid `typedef void mytype;`
+        #         # if self.is_void and vartype.ref_count==0:
+        #         #     compilation_err.append('Variable `{}` declared void'.format(decl.name))
+        #         #     parser.error = compilation_err[-1]
+        #         #     parser_error()
                 
-                # # struct declaration checking
-                # if self.is_struct and not self._type.is_defined() and vartype.ref_count==0:
-                #     compilation_err.append('storage of struct named {} not avaiable'.format(self._type.name))
-                #     parser.error = compilation_err[-1]
-                #     parser_error()
+        #         # # struct declaration checking
+        #         # if self.is_struct and not self._type.is_defined() and vartype.ref_count==0:
+        #         #     compilation_err.append('storage of struct named {} not avaiable'.format(self._type.name))
+        #         #     parser.error = compilation_err[-1]
+        #         #     parser_error()
 
-                # Add declaration in symtab
-                symtable.add_typedef(decl.name, vartype)
+        #         # Add declaration in symtab
+        #         symtable.add_typedef(decl.name, vartype)
 
-        else:
+        # else:
 
-            for init_decl in self.init_list:
+        #     for init_decl in self.init_list:
 
-                decl = init_decl.declarator
+        #         decl = init_decl.declarator
 
-                # Function declaration !
-                if isinstance(decl, FuncDirectDecl):    
-                    vartype = VarType(decl.ref_count, self._type)
-                    symtable.add_func(Function(vartype, decl.name, decl.param_list))
-                    continue
+        #         # Function declaration !
+        #         if isinstance(decl, FuncDirectDecl):    
+        #             vartype = VarType(decl.ref_count, self._type)
+        #             symtable.add_func(Function(vartype, decl.name, decl.param_list))
+        #             continue
 
-                vartype = VarType(decl.ref_count, self._type, decl.arr_offset)
+        #         vartype = VarType(decl.ref_count, self._type, decl.arr_offset)
 
-                # for complex typedef like `type_name` -> `int *`, etc
-                vartype.ref_count += self.specifier.ref_count
-                if vartype.arr_offset == None:
-                    vartype.arr_offset = self.specifier.arr_offset
-                else:
-                    vartype.arr_offset = self.specifier.arr_offset + vartype.arr_offset
+        #         # for complex typedef like `type_name` -> `int *`, etc
+        #         vartype.ref_count += self.specifier.ref_count
+        #         if vartype.arr_offset == None:
+        #             vartype.arr_offset = self.specifier.arr_offset
+        #         else:
+        #             vartype.arr_offset = self.specifier.arr_offset + vartype.arr_offset
                 
-                # Sanity checking of arr offset
-                if not all(map(lambda x: isinstance(x, Const) and x.dvalue=='int', decl.arr_offset)):
-                    parser_error('Size of array `{}` has non-integer type'.format(decl.name))
+        #         # Sanity checking of arr offset
+        #         if not all(map(lambda x: isinstance(x, Const) and x.dvalue=='int', decl.arr_offset)):
+        #             parser_error('Size of array `{}` has non-integer type'.format(decl.name))
 
-                # Sanity checking of void declartion
-                if self.is_void and vartype.ref_count==0:
-                    parser_error('Variable `{}` declared void'.format(decl.name))
+        #         # Sanity checking of void declartion
+        #         if self.is_void and vartype.ref_count==0:
+        #             parser_error('Variable `{}` declared void'.format(decl.name))
                 
-                # struct declaration checking
-                if self.is_struct and not self._type.is_defined() and vartype.ref_count==0:
-                    parser_error('storage of struct named `{}` not avaiable'.format(self._type.name))
+        #         # struct declaration checking
+        #         if self.is_struct and not self._type.is_defined() and vartype.ref_count==0:
+        #             parser_error('storage of struct named `{}` not avaiable'.format(self._type.name))
 
-                # Add declaration in symtab
-                symtable.add_var(decl.name, vartype, self.is_static)
+        #         # Add declaration in symtab
+        #         if init_decl.initializer == None:
+        #             symtable.add_var(decl.name, vartype, self.is_static)
 
     def gen(self):
         for idx, init in enumerate(self.init_list):
@@ -2102,9 +2163,9 @@ class IterStmt(Statement):
         # `for` loop
         else:
             e1, e2, e3 = self.iter_expr
-            
-            e1.gen()
-            tac.backpatch(getattr(e1, 'nextlist', []), tac.nextquad())
+            if e1:
+                e1.gen()
+                tac.backpatch(getattr(e1, 'nextlist', []), tac.nextquad())
 
             
             # if `e3` is None then it is equiv to `while` loop
@@ -2115,17 +2176,18 @@ class IterStmt(Statement):
             else:
             
                 begin = tac.nextquad()
-            
-                e2.bool = True
+                if e2:
+                    e2.bool = True
 
-                e2.gen()
-                tac.backpatch(getattr(e2, 'truelist', []), tac.nextquad())
+                    e2.gen()
+                    tac.backpatch(getattr(e2, 'truelist', []), tac.nextquad())
                 self.stmt.gen()
                 
                 tac.backpatch(getattr(self.stmt, 'nextlist', []), tac.nextquad())
 
-                e3.gen()
-                tac.backpatch(getattr(e3, 'nextlist', []), begin)
+                if e3:
+                    e3.gen()
+                    tac.backpatch(getattr(e3, 'nextlist', []), begin)
 
                 tac.backpatch(getattr(e3, 'continuelist', []) + getattr(self.stmt, 'continuelist', []), begin)
 

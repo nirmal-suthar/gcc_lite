@@ -406,6 +406,12 @@ class AssemblyGen:
 
                 self.add(f'push {self.get_symbol(code.e1, reg=True, byte_reg=True)}')
                 # self.add(f'push {self.get_symbol(code.e1)}')
+            elif self.get_info(code.e1) and self.get_info(code.e1)['type'].is_struct_type():
+                size = self.get_info(code.e1)['type']._type.get_size()
+                r = self.get_symbol(code.e1, reg=True)
+                assert(size % 4 == 0)
+                for i in reversed(range(0, size, 4)):
+                    self.add(f'pushl {hex(i)}({r})')
             else:
                 self.add(f'push {self.get_symbol(code.e1)}')
 
@@ -486,6 +492,16 @@ class AssemblyGen:
             self.add(f'push %edi')
             
         elif code.instr == 'FuncEnd':
+            func = symtable.lookup_func(code.e1)
+            if func.ret_type.is_struct_type():
+                # copy from %eax to ret@ and store addr of ret@ in %eax
+                scope = symtable.all_scope[func.scope_id]
+                self.add(f'pushl ${func.ret_type.get_size()}')
+                self.add(f'pushl %eax')
+                self.add(f'pushl {hex(scope.lookup_info("ret@")["offset"])}(%ebp)')
+                self.add(f'call bufcpy')
+                self.add(f'addl $12, %esp')
+                self.add(f'movl {hex(scope.lookup_info("ret@")["offset"])}(%ebp), %eax')
             self.add(f'pop %edi')
             self.add(f'pop %esi')
             self.add(f'pop %edx')
@@ -493,7 +509,10 @@ class AssemblyGen:
             self.add(f'pop %ebx')
             self.add(f'mov %ebp, %esp')
             self.add(f'pop %ebp')
-            self.add(f'ret ')
+            if func.ret_type.is_struct_type():
+                self.add(f'ret $4')
+            else:
+                self.add(f'ret ')
         
         elif code.instr == 'spill all':
             self.spillallregs()

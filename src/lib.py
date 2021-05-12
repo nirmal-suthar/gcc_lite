@@ -3,6 +3,7 @@ stdlib = '''
 int printf(char *s);
 int scanf(char *s);
 void strcpy(char *d, char *s);
+void* memcpy(void* d, void* s, int cnt);
 
 // TODO: add malloc, free and math function
 
@@ -22,4 +23,7 @@ int scanint(){
     return tmp;
 }
 
+void * bufcpy(void * dest, void* src, int cnt){
+    return memcpy(dest, src, cnt);
+}
 '''

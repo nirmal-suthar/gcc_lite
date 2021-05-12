@@ -1,6 +1,7 @@
 import csv
 from parser import parser_error
 import re
+import copy
 
 # def parser_error(error_str=None):
 #     parser.compilation_err = True
@@ -54,11 +55,12 @@ class ScopeTable:
                 if vtype.is_float():
                     # to push float as a parameter lea -8(%esp), %esp 
                     # allocates 8 bytes for 1 float, (don't know why? if taken 4 it gives incorrect output)
-                    offset = self.param_size + ADDR_SIZE + 8
+                    offset = self.param_size + 2*ADDR_SIZE # 2 ADDR_SIZE for return addr and rbp
+                    # offset = self.param_size + ADDR_SIZE + 8
                     self.param_size += 8
                 else:
-                    # offset = self.param_size + 2*ADDR_SIZE + vtype.get_size() # 2 ADDR_SIZE for return addr and rbp
-                    offset = self.param_size + ADDR_SIZE + vtype.get_size() # ADDR_SIZE for storing ebp
+                    offset = self.param_size + 2*ADDR_SIZE # 2 ADDR_SIZE for return addr and rbp
+                    # offset = self.param_size + ADDR_SIZE + vtype.get_size() # ADDR_SIZE for storing ebp
                     self.param_size += vtype.get_size()
             else:
                 offset = -(vtype.get_size() + self.size)
@@ -205,7 +207,8 @@ class SymbolTable():
     def get_size(self, dtype):
         raise Exception('TODO')
 
-    def add_var(self, name, vtype, is_static = False, is_param=False):
+    def add_var(self, name, vtype, is_static = False, is_param=False, ret_var=False):
+        vtype = copy.deepcopy(vtype)
         scope = self.global_scope if is_static else self.cur_scope()
         if scope.lookup_var(name):
             parser_error('Redeclaration of variable named `{}`'.format(name))
@@ -219,7 +222,8 @@ class SymbolTable():
             parser_error(f'`{name}` redeclared as different kind of symbol')
             return
 
-        if "#" in name:
+        if "#" in name and not ret_var:
+            # ret_var variable where returned struct is stored
             vtype.is_tmp = True
         scope.add_var(name, vtype, is_param=is_param)
         # scope.variables[name] = {'type': vtype, 'offset': offset}
@@ -269,6 +273,9 @@ class SymbolTable():
 
         self.function[func.name] = func
 
+    def is_global_scope(self):
+        return self.cur_scope() == self.global_scope
+        
     # for enabling printf and scanf
     def add_fmt(self, label, fmt_str):
         self.fmt_var[label] = fmt_str
