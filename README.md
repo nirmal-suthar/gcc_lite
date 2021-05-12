@@ -2,7 +2,9 @@
 C-Compiler (project+assignment) for course CS335, 2021 - II 
 
 **Source language** :- C
+
 **Implementation language** :- Python
+
 **Target language** :- x86 assembly language
 
 ## Structure
@@ -13,7 +15,6 @@ $ make dep
 # OR
 $ pip install --ignore-installed -r ./requirements.txt  
 ```
-
 ### For building executable
 ```bash
 $ make
