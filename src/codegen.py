@@ -141,7 +141,7 @@ class AssemblyGen:
     def get_addr(self, name_info, displ=False, need=False, remove_dollar=False):
         """ get memory address of name """
 
-        if re.fullmatch('\$.*', name_info):
+        if isinstance(name_info, str) and re.fullmatch('\$.*', name_info):
             return name_info
         
         elif isinstance(name_info, str):
@@ -389,8 +389,11 @@ class AssemblyGen:
             self.add(f'add ${hex(FuncType.param_size())}, %esp')
 
             if code.e2 != '#':
-                self.reg_d[self.reg_no['eax']] = code.e2
-                self.addr_d[code.e2] = self.reg_no['eax']
+                if self.is_float(code.e2):
+                    self.add(f'fstp {self.get_addr(code.e2)}')
+                else:
+                    self.reg_d[self.reg_no['eax']] = code.e2
+                    self.addr_d[code.e2] = self.reg_no['eax']
 
         elif code.instr in ['printf', 'scanf']:
 
@@ -485,8 +488,13 @@ class AssemblyGen:
 
         elif code.instr == 'return':
             
+            # print(self.reg_no, self.reg_d)
+            # name = self.reg_d[self.reg_no['eax']]
             self.spillreg(self.reg_no['eax'])
-            self.loadreg(self.reg_no['eax'], code.e1)
+            if self.is_float(code.e1):
+                self.add(f'fld {self.get_addr(code.e1)}')
+            else:
+                self.loadreg(self.reg_no['eax'], code.e1)
             
         elif code.instr == 'FuncBegin':
             self.add(f'{code.e1}:')
@@ -644,13 +652,15 @@ class AssemblyGen:
             else:
                 # read char from memory
                 self.add(f'movzbl {self.get_addr(code.e1)}, {self.get_symbol(code.e2, reg=True)}')
-
         elif code.op == 'float2char':
             # float => int => char
             raise Exception('not handled')
         elif code.op == 'char2float':
             # char => int => float
             raise Exception('not handled')
+        elif code.op == 'double2float':
+            self.add(f'fldl {self.get_addr(code.e1)}')
+            self.add(f'fstps {self.get_addr(code.e2)}')
         else:
             raise Exception(f'Invalid code.op = {code.op}')
     
