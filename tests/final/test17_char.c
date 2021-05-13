@@ -28,14 +28,6 @@ int main(){
     printf("%d %d %d %d\n", a.y[0], a.y[1], a.z.a, a.z.b);
     printf("%f %d %s\n", c->x, (c->y)[0], s);
     printf("%f %d %s\n", a.x, (c->y)[0], s);
-    // printf("%f %d %s\n", a.x, (c->y)[0], s);
-    // int i, j;
-    // for(i=0;i < 2; i++){
-    //     for(j=0; j < 3; j++){
-    //         printf("%d ", b[i][j]);
-    //     }
-    //     printf("\n");
-    // }
-    // printf("%d %d\n", b[0], b[1]);
+
     return 0;
 }
