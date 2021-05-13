@@ -21,23 +21,6 @@ float logf(float x);
 float sqrtf(float x);
 float powf(float base, float power);
 
-
-// TODO: add malloc, free and math function
-
-// Extra functions
+void* malloc(int size);
+void free(void *ptr);
 '''
-# void prints(char* s){
-#     printf("%s", s);
-# }
-
-# void printn(int n){
-#     printf("%d", n);
-# }
-
-# int scanint(){
-#     int tmp;
-#     scanf("%d", &tmp);
-#     return tmp;
-# }
-
-# '''

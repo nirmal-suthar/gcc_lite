@@ -147,14 +147,14 @@ class StructType(_BASENODE):
         if self.name != other.name:
             return False
 
-        if len(self.variables) != len(other.variables):
-            return False
+        # if len(self.variables) != len(other.variables):
+        #     return False
 
-        for key1, key2 in zip(self.variables, other.variables):
-            if key1 != key2:
-                return False
-            if self.variables[key1] != other.variables[key2]:
-                return False
+        # for key1, key2 in zip(self.variables, other.variables):
+        #     if key1 != key2:
+        #         return False
+        #     if self.variables[key1] != other.variables[key2]:
+        #         return False
         return True    
 
 class Function(_BASENODE):

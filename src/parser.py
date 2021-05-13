@@ -557,8 +557,16 @@ def p_function_declarator(p):
         p[0] = FuncDirectDecl(0, p[1], p[3])
     else:
         p[0] = FuncDirectDecl(p[1], p[2], p[4])
-        
 
+def p_function_declarator1(p):
+    ''' function_declarator : IDENTIFIER '(' ')'
+            | pointer IDENTIFIER '(' ')'
+    '''
+    if len(p)==4:
+        p[0] = FuncDirectDecl(0, p[1], [])
+    else:
+        p[0] = FuncDirectDecl(p[1], p[2], [])
+        
 def p_pointer(p):
     ''' pointer : '*'
             | '*' pointer
