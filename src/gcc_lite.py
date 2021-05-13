@@ -56,7 +56,7 @@ if __name__ == "__main__":
     # if output file is not specified, then
     # create the default outfile name `a.out`
     if args.out is None:
-        ofile = args.input.split('.')[0]
+        ofile = args.input.split('/')[-1].split('.')[0]
         args.out = 'a.out' 
     else:
         # strip the extension of outfile
@@ -132,13 +132,13 @@ if __name__ == "__main__":
             asm_file = os.path.join(tmpdir, os.path.basename(ofile) + '.s')
             asm.dump_code(asm_file)
             # linking and creating executable by passing through gcc
-            os.system(f"gcc -m32 --no-pie -o {args.out} {asm_file}")
+            os.system(f"gcc -m32 --no-pie -o {args.out} {asm_file} -lm")
     # else store at specified place
     else:   
         asm_file = ofile + '.s'
         asm.dump_code(asm_file)
         # linking and creating executable by passing through gcc
-        os.system(f"gcc -m32 --no-pie -o {args.out} {asm_file}")
+        os.system(f"gcc -m32 --no-pie -o {args.out} {asm_file} -lm")
 
     # run the executable if specified
     if args.exec:
