@@ -57,8 +57,7 @@ def p_push_scope(p):
         _, _, func_name, args = p[-2]
         func = symtable.lookup_func(func_name)
         symtable.push_scope('Function', func=func)
-        func.scope_id = len(symtable.all_scope)-1
-
+        func.scope_id = len(symtable.all_scope) - 1
         if func.ret_type.is_struct_type():
             # return address of struct is stored in ret@ symbol
             symtable.add_var("ret@", func.ret_type.get_pointer_type(), is_param=True)

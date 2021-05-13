@@ -101,12 +101,12 @@ if __name__ == "__main__":
             graph.write_png(png_file)
 
     # try generating IR and symbol table    
-    try:
-        syntax_tree.gen()
-    except:
-        print(bcolors.BOLD+f'{lexer.filename}:0:0'+bcolors.ENDC,end='')
-        print(bcolors.FAIL+' IR Error'+bcolors.ENDC)
-        exit(1)
+    # try:
+    syntax_tree.gen()
+# except:
+    # print(bcolors.BOLD+f'{lexer.filename}:0:0'+bcolors.ENDC,end='')
+    # print(bcolors.FAIL+' IR Error'+bcolors.ENDC)
+    # exit(1)
 
     if args.sym:    
         sym_file = ofile + '.csv'
@@ -116,13 +116,13 @@ if __name__ == "__main__":
         tac.dump_code(ir_file)
 
     # try generating assembly from IR
-    try:
-        asm = AssemblyGen(tac.func_code, debug=args.debug)
-        asm.gen_assembly()
-    except:
-        print(bcolors.BOLD+f'{lexer.filename}:0:0'+bcolors.ENDC,end='')
-        print(bcolors.FAIL+' Code Generation Error'+bcolors.ENDC)
-        exit(1)
+    # try:
+    asm = AssemblyGen(tac.func_code, debug=args.debug)
+    asm.gen_assembly()
+    # except:
+    #     print(bcolors.BOLD+f'{lexer.filename}:0:0'+bcolors.ENDC,end='')
+    #     print(bcolors.FAIL+' Code Generation Error'+bcolors.ENDC)
+    #     exit(1)
 
     # dump the assembly!
 
