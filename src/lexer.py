@@ -8,38 +8,22 @@ import sys
 
 
 keywords = {
-    # 'asm':'ASM',
-    'auto':'AUTO',
     'break':'BREAK',
     'case':'CASE',
     'char':'CHAR',
-    'const':'CONST',
     'continue':'CONTINUE',
     'default':'DEFAULT',
-    'do':'DO',
-    'double':'DOUBLE',
     'else':'ELSE',
-    'enum':'ENUM',
-    'extern':'EXTERN',
     'float':'FLOAT',
     'for':'FOR',
-    'goto':'GOTO',
     'if':'IF',
     'int':'INT',
-    'long':'LONG',
-    'register':'REGISTER',
     'return':'RETURN',
-    'short':'SHORT',
-    'signed':'SIGNED',
     'sizeof':'SIZEOF',
-    'static':'STATIC',
     'struct' : 'STRUCT',
     'switch':'SWITCH',
     'typedef':'TYPEDEF',
-    'union':'UNION',
-    'unsigned':'UNSIGNED',
     'void':'VOID',
-    'volatile':'VOLATILE',
     'while':'WHILE',
 }
 
@@ -88,9 +72,6 @@ tokens = [
         'NE_OP',
         'GE_OP',
         'LE_OP',
-
-        # Other
-        'ELLIPSIS',
 
         ] + list(keywords.values())
 
@@ -145,9 +126,6 @@ t_EQ_OP         = r'=='
 t_NE_OP         = r'!='
 t_GE_OP         = r'>='
 t_LE_OP         = r'<='
-
-# Other
-t_ELLIPSIS      = r'\.\.\.'
 
 # Curly Paranthesis
 @TOKEN(r'{|(<%)')
