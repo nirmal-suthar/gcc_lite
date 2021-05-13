@@ -359,13 +359,7 @@ def p_assignment_operator(p):
 def p_expression(p):
     ''' expression : assignment_expression
     '''
-    if len(p)==2:
-        p[0] = p[1]
-    elif isinstance(p[1], CommaExpr):
-        p[0] = p[1].copy()
-        p[0].add_expr(p[5])
-    else:
-        p[0] = CommaExpr(p[1], p[2])
+    p[0] = p[1]
 
 def p_constant_expression(p):
     ''' constant_expression	: conditional_expression
@@ -442,7 +436,6 @@ def p_init_declarator(p):
 
 def p_storage_class_specifier(p):
     ''' storage_class_specifier : TYPEDEF
-        | STATIC
     '''
     p[0] = p[1]
 
@@ -746,13 +739,13 @@ def p_selection_statement(p):
 
 
 def p_iteration_statement_while(p):
-    ''' iteration_statement : WHILE '(' expression ')' loop_scope statement
+    ''' iteration_statement : WHILE '(' expression ')' loop_scope compound_statement
     '''
     p[0] = IterStmt(p[1], p[3], p[6]) 
     
 def p_iteration_statement_for(p):
-    ''' iteration_statement : FOR '(' expression_statement expression_statement ')' loop_scope statement
-            | FOR '(' expression_statement expression_statement expression ')' loop_scope statement
+    ''' iteration_statement : FOR '(' expression_statement expression_statement ')' loop_scope compound_statement
+            | FOR '(' expression_statement expression_statement expression ')' loop_scope compound_statement
     '''
     if len(p)==8:
         p[0] = IterStmt(p[1], (p[3](),p[4](),None), p[7])
