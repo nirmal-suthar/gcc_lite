@@ -196,6 +196,7 @@ class VarType(_BASENODE):
         self._type = _type
         self.arr_offset = arr_offset
         self.is_tmp = False
+        self.is_param = False
 
     def get_size(self) -> int:
         return self._get_size()
@@ -492,7 +493,10 @@ class Identifier(BaseExpr):
             # store starting addr of struct/array
             self.place = tac.newtmp()
             symtable.add_var(self.place, self.expr_type)
-            tac.emit(f"{self.place} = & {self.name}")
+            if self.expr_type.is_param and not lvalue:
+                tac.emit(f"{self.place} = {self.name}")
+            else:
+                tac.emit(f"{self.place} = & {self.name}")
         else:
             if lvalue:
                 self.place = tac.newtmp()
@@ -1246,6 +1250,10 @@ class AssignExpr(OpExpr):
 
     def get_type(self):
         
+        if self.lhs.expr_type.is_array():
+            parser_error("assignment to expression with array type")
+            return
+
         if not self.lhs.has_lvalue():
             parser_error("lvalue required as left operand of assignment")
             self.expr_type = self.lhs.expr_type
@@ -1737,16 +1745,24 @@ class Initializers(_BASENODE):
     def __init__(self, init_list):
         super().__init__()
         self.init_list = init_list
+        self.check_not_string()
 
     def gen(self):
         for init in self.init_list:
             init.gen()
             tac.backpatch(getattr(init, 'nextlist', []), tac.nextquad())
     
+    def check_not_string(self):
+        for e in self.init_list:
+            if isinstance(e, Const) and e.expr_type.is_string():
+                parser_error("string is not allowed in initializer")
+                return
+                
     def compatible_with(self, vartype : VarType, error=False):
         
         if vartype.is_array():
             # lhs is array
+            
             if len(self.init_list) > vartype.get_array_len():
                 if error:
                     parser_error(f"too many initializers")
