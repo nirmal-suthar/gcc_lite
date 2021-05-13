@@ -15,7 +15,7 @@ def binary2float(b):
     return struct.unpack('>f', struct.pack('>I', int(b, 16)))[0]
 
 class AssemblyGen:
-    def __init__(self, func_code):
+    def __init__(self, func_code, debug=False):
         self.func_code = func_code
         self.reg_no = {'ebx':0, 'ecx':1, 'esi':2, 'edi':3, 'eax':4, 'edx':5}
         self.reg_name =  {value:key for key, value in self.reg_no.items()}
@@ -25,6 +25,7 @@ class AssemblyGen:
         self.addr_d = {}
         self.assembly = []
         self.cur_instr = None
+        self.debug = debug
     
     def code_idx(self):
         return len(self.assembly)
@@ -273,7 +274,10 @@ class AssemblyGen:
                     self.spillallregs() # spill registers before jump / labelled instruction for consistency
                     self.add(f'{self.labels[str(idx)]}:')
                 
-                self.add(f'\n // {code} \n // {self.reg_no} \n // {self.addr_d} \n // {self.reg_d}')
+                self.add(f'\n // {code}')
+                if self.debug:
+                    self.add(f'\n // {self.reg_no} \n // {self.addr_d} \n // {self.reg_d}')
+                    
                 # gen it!
                 self.gen_instr(code)
 
@@ -381,7 +385,7 @@ class AssemblyGen:
             if FuncType is None:
                 raise Exception(f'functype is none {code.e1}')
 
-            self.add(f'add ${FuncType.param_size()}, %esp')
+            self.add(f'add ${hex(FuncType.param_size())}, %esp')
 
             if code.e2 != '#':
                 self.reg_d[self.reg_no['eax']] = code.e2
@@ -394,7 +398,7 @@ class AssemblyGen:
             # assuming label for the function is same as name of the function
             self.add(f'call {code.instr}')
 
-            self.add(f'add ${code.e1}, %esp')
+            self.add(f'add ${hex(int(code.e1))}, %esp')
 
             if code.e2 != '#':
                 self.reg_d[self.reg_no['eax']] = code.e2
@@ -490,11 +494,6 @@ class AssemblyGen:
             func = symtable.lookup_func(code.e1)
             scope = symtable.all_scope[func.scope_id]
             self.add(f'sub ${hex(scope.size + scope.child_max_size)}, %esp')
-            self.add(f'push %ebx')
-            self.add(f'push %ecx')
-            self.add(f'push %edx')
-            self.add(f'push %esi')
-            self.add(f'push %edi')
             
         elif code.instr == 'FuncEnd':
             func = symtable.lookup_func(code.e1)
@@ -504,14 +503,10 @@ class AssemblyGen:
                 self.add(f'pushl ${func.ret_type.get_size()}')
                 self.add(f'pushl %eax')
                 self.add(f'pushl {hex(scope.lookup_info("ret@")["offset"])}(%ebp)')
-                self.add(f'call bufcpy')
+                self.add(f'call memcpy')
                 self.add(f'addl $12, %esp')
                 self.add(f'movl {hex(scope.lookup_info("ret@")["offset"])}(%ebp), %eax')
-            self.add(f'pop %edi')
-            self.add(f'pop %esi')
-            self.add(f'pop %edx')
-            self.add(f'pop %ecx')
-            self.add(f'pop %ebx')
+                
             self.add(f'mov %ebp, %esp')
             self.add(f'pop %ebp')
             if func.ret_type.is_struct_type():

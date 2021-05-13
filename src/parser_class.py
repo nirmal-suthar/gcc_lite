@@ -1,5 +1,3 @@
-from os import removedirs
-from sys import exec_prefix
 from typing import Union, List
 import pydot
 from parser import parser, parser_error
@@ -109,7 +107,9 @@ class StructType(_BASENODE):
         # return size
 
     def __str__(self):
-        return 'struct {} {{ {} }}'.format(self.name, self.variables)
+        if self.name is None:
+            return f'struct <anonymous>'
+        return f'struct {self.name}'
 
     def is_defined(self):
         if self.variables is not None:
@@ -208,6 +208,7 @@ class VarType(_BASENODE):
                 if self.is_tmp:
                     return ADDR_SIZE
                 size = self.get_ref_size() * int(self.arr_offset[0].const)
+
                 return size
         else:
             if isinstance(self._type, StructType):
@@ -422,8 +423,6 @@ class BaseExpr(_BASENODE) :
         else:
             return False
 
-
-
 class Const(BaseExpr):
     def __init__(self, const, dvalue):
         super().__init__("Constant")
@@ -471,7 +470,7 @@ class Const(BaseExpr):
             self.dvalue = 'int'
             self.expr_type = VarType(0, 'int')
         elif self.dvalue == 'STRING_LITERAL':
-            self.expr_type = VarType(1, 'char', [Const(str(len(self.const)-1), 'int')])
+            self.expr_type = VarType(1, 'char')
         else:
             parser_error('Unknown Constant type')
 

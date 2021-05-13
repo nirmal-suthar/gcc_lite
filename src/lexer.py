@@ -240,19 +240,9 @@ def find_column(input, token):
 # Build the lexer
 lexer = lex.lex(debug = 0)
 lexer.struct_kw = False
-if __name__ == "__main__":
 
-    # Build the lexer
-    # lexer = lex.lex(debug = 0)
-
-    # Calculate column number from lexpos
-    # lexer.pos_newline = -1  #FIXME: redundant
-    
-    with open(sys.argv[1], "r") as f:
-        inp = f.read()
-    lexer.input(inp)
-    
-
+def main_lexer(ifile):
+    lexer.input(ifile)
     tokenList = []
     while True:
         tok = lexer.token()
@@ -265,6 +255,12 @@ if __name__ == "__main__":
             break
     
     print(tabulate(tokenList, headers=["Token", "Lexeme", "Line#", "Column#"]))
+
+
+if __name__ == "__main__":
+    with open(sys.argv[1], "r") as f:
+        inp = f.read()
+    main_lexer(inp)
 
 # from parser import symtable
 from helper import symtable

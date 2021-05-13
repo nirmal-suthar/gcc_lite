@@ -806,7 +806,7 @@ def p_function_definition(p):
         vartype = VarType(p[2], p[1].type_spec)    
         symtable.add_func(Function(vartype, p[3], p[4]))
 
-from lexer import lexer, tokens
+from lexer import lexer, tokens, main_lexer
 
 parser = yacc.yacc()
 parser.type = None
