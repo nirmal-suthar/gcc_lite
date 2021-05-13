@@ -467,11 +467,11 @@ class Const(BaseExpr):
         elif self.dvalue == 'float':
             self.expr_type = VarType(0, 'float')
         elif self.dvalue == 'char':
-            self.const = str(ord(self.const[1:-1]))
+            self.const = str(ord(self.const[1:-1].encode('utf-8').decode('unicode_escape')))
             self.dvalue = 'int'
             self.expr_type = VarType(0, 'int')
         elif self.dvalue == 'STRING_LITERAL':
-            self.expr_type = VarType(1, 'char', [Const(str(len(self.const)-1), 'int')])
+            self.expr_type = VarType(1, 'char', [Const(str(len(self.const.encode('utf-8').decode('unicode_escape'))-1), 'int')])
         else:
             parser_error('Unknown Constant type')
 
@@ -566,7 +566,7 @@ class OpExpr(BaseExpr):
 
             if self.expr_type.basic_type() == 'float' and not self.expr_type.is_pointer():
                 operator = 'float' + self.ops
-            elif self.ops in ['<<', '>>', '|', '&', '%']:
+            elif self.ops in ['<<', '>>', '|', '&', '%', '^']:
                 operator = self.ops
             else:
                 operator = 'int' + self.ops
@@ -967,7 +967,10 @@ class PostfixExpr(OpExpr):
 
                 # push parameters other than the first one
                 for param in reversed(self.rhs):
-                    args_size += param.expr_type.get_size()
+                    if param.expr_type.is_array():
+                        args_size += ADDR_SIZE
+                    else:
+                        args_size += param.expr_type.get_size()
                     tac.emit(f"param {param.place}")
 
                 # call the function
@@ -1360,6 +1363,9 @@ class InitDeclarator(_BaseDecl):
             elif isinstance(self.initializer, Const) and self.initializer.expr_type.is_string():
                 if not self.expr_type.is_string():
                     parser_error(f"Can not assign string to non string symbol {self.declarator.name}")
+                    return
+                if self.expr_type.get_size() < self.initializer.expr_type.get_size():
+                    parser_error(f"initializer-string for array of chars is too long")
                     return
                 # symtable.add_var(self.declarator.name, self.expr_type, is_static=parser.is_static)
             else:

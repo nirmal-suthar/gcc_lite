@@ -157,10 +157,11 @@ class AssemblyGen:
 
         if name_info['scope_id'] == 0:
             # global variables are stored in .data section
-            if remove_dollar:
-                return name_info['name']
-            else:
-                return '$' + name_info['name']
+            # if remove_dollar:
+            #     return name_info['name']
+            # else:
+            #     return '$' + name_info['name']
+            return name_info['name']
         else:
             if displ:
                 return hex(name_info['offset'])
@@ -541,6 +542,13 @@ class AssemblyGen:
     def is_const(self, e):
         return e[0] == '$'
     
+    def is_global(self, e):
+        info = self.get_info(e)
+        if e == None:
+            print("IS GLOBAL RETURNED NONE")
+            return False
+        return info['scope_id'] == 0
+    
     def is_float(self, e):
         return self.get_info(e) and self.get_info(e)['type'].is_float()
 
@@ -702,14 +710,17 @@ class AssemblyGen:
             self.add(f'mov $0, %edx')
             self.add(f'mov {self.get_symbol(code.e1)}, %eax')
             
-            self.add(f'idivl {self.get_symbol(code.e2)}')
+            if self.is_const(code.e2):
+                self.add(f'idivl {self.get_symbol(code.e2, reg=True)}')
+            else:
+                self.add(f'idivl {self.get_symbol(code.e2)}')
             self.reg_d[self.reg_no['edx']] = code.e3
             self.addr_d[code.e3] = self.reg_no['edx']
         elif code.op == '<<':
             # shl e2, e1
             # e2 can either be constant or %cl (lower 8 bits of %ecx) register
             self.spillreg(self.reg_no['ecx'])
-            self.add(f"mov {self.get_symbol(code.e2)}, %cl")
+            self.add(f"mov {self.get_symbol(code.e2)}, %ecx")
             
             r = self.get_symbol(code.e3, reg=True)
             self.add(f'mov {self.get_symbol(code.e1)}, {r}') # store e1 in e3
@@ -719,7 +730,7 @@ class AssemblyGen:
             # shr e2, e1
             # e2 can either be constant or %cl (lower 8 bits of %ecx) register
             self.spillreg(self.reg_no['ecx'])
-            self.add(f"mov {self.get_symbol(code.e2)}, %cl")
+            self.add(f"mov {self.get_symbol(code.e2)}, %ecx")
             
             r = self.get_symbol(code.e3, reg=True)
             self.add(f'mov {self.get_symbol(code.e1)}, {r}') # store e1 in e3
