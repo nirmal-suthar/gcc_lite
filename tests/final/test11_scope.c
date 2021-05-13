@@ -1,7 +1,7 @@
-int a = 10;
+int a;
 
 void f(){
-  int a;
+  a=10;
 }
 
 int g(int b,int c){
@@ -23,8 +23,6 @@ int main()
   f1 = g(a,b);
   q[1] = a;
   a = k<2 ? 4: 6 ;
-  printn(k);
-  prints("\n");
-  printn(q[1]);
-  prints("\n");
-}
+  printf("k = %d\n",k);
+  printf("q[1] = %d\n",q[1]);
+  }  

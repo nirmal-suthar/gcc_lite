@@ -4,9 +4,9 @@ int main()
     char file_name[10] = "a.txt";
     char msg[20] = "hello world";
 
-    fd_out = fopen(file_name, 2);
-    x = fwrite(fd_out, msg , 20);
+    fd_out = open(file_name, 2);
+    x = write(fd_out, msg , strlen(msg)+1);
 
-    fclose(fd_out);
+    close(fd_out);
 
 }
