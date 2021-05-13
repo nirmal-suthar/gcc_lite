@@ -168,8 +168,18 @@ class Function(_BASENODE):
     
     def param_size(self):
         size = 0
-        for name, vartype in self.args:
-            size += vartype.get_size()
+        for name, vtype in self.args:
+            if vtype.is_float():
+                size += 8
+            else:
+                if vtype.is_array():
+                    self.param_size += ADDR_SIZE
+                else:
+                    self.param_size += vtype.get_size()
+
+        # size = 0
+        # for name, vartype in self.args:
+        #     size += vartype.get_size()
         aligned_size = ((size+ALIGN_BYTES-1)>>ALIGN_SHIFT)<<ALIGN_SHIFT 
         return aligned_size
         
@@ -497,12 +507,18 @@ class Identifier(BaseExpr):
             else:
                 tac.emit(f"{self.place} = & {self.name}")
         else:
-            if lvalue:
+            if self.expr_type.is_float() and self.expr_type.is_param:
                 self.place = tac.newtmp()
-                symtable.add_var(self.place, self.expr_type.get_pointer_type())
-                tac.emit(f"{self.place} = & {self.name}")
+                symtable.add_var(self.place, VarType(0, 'float'))
+                if not lvalue:
+                    tac.emit(f'{self.place} = double2float {self.name}')
             else:
-                self.place = self.name # resolved using symtable during code generation
+                if lvalue:
+                    self.place = tac.newtmp()
+                    symtable.add_var(self.place, self.expr_type.get_pointer_type())
+                    tac.emit(f"{self.place} = & {self.name}")
+                else:
+                    self.place = self.name # resolved using symtable during code generation
 
         if getattr(self, 'bool', False):
             self.truelist = [tac.nextquad()]
