@@ -17,25 +17,27 @@ $ pip install --ignore-installed -r ./requirements.txt
 ```
 ### For building executable
 ```bash
-$ make
 $ make clean # For removing the build
+$ make
 ```
 
-###For running the compiler: 
+### For running the compiler: 
 
 ```bash
-./bin/gcc_lite [-o outfile] <input_file>` eg. `./bin/parser tests/helloworld.c`
+./bin/gcc_lite [-o outfile] tests/helloworld.c 
 ```
 
 ### For more informations about usage
 ```bash
-usage: gcc_lite [-h] [--input INPUT] [-d] [-o OUT] [-l] [-D] [-p] [-I] [--sym] [-S] [-R]
+usage: gcc_lite [-h] [-d] [-o OUT] [-l] [-D] [-p] [-I] [--sym] [-S] [-R] input
 
 Compiler for C programs
 
+positional arguments:
+  input              C program file to compile
+
 optional arguments:
   -h, --help         show this help message and exit
-  --input INPUT      C program file to parse
   -d, --debug        Generate assembly with extra information (for debugging purposes)
   -o OUT, --out OUT  File name to store generated executable
   -l, --lex          Store output of lexer
@@ -46,7 +48,6 @@ optional arguments:
   -S, --asm          Store the generated assembly file
   -R, --exec         Execute the generated program
 ```
-
 
 ## Features
 
