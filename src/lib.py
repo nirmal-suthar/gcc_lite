@@ -23,4 +23,6 @@ float powf(float base, float power);
 
 void* malloc(int size);
 void free(void *ptr);
+
+int strlen(char *s);
 '''
