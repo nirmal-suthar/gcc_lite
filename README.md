@@ -21,30 +21,42 @@ $ make
 $ make clean # For removing the build
 ```
 
-### For generating dot file (parser) and dump of symbol table in `csv` format
+###For running the compiler: 
+
 ```bash
-$ ./bin/parser -o myAST.dot /tests/helloworld.c 
-
-# For generates a postscript program containing the drawing of the tree 
-$ dot -Tps myAST.dot -o myAST.ps 
-# Alternatively, for generating .png file
-$ ./bin/parser -o myAST.dot --png /tests/helloworld.c
+./bin/gcc_lite [-o outfile] <input_file>` eg. `./bin/parser tests/helloworld.c`
 ```
 
+### For more informations about usage
+```bash
+usage: gcc_lite [-h] [--input INPUT] [-d] [-o OUT] [-l] [-D] [-p] [-I] [--sym] [-S] [-R]
 
-### For more informations
+Compiler for C programs
+
+optional arguments:
+  -h, --help         show this help message and exit
+  --input INPUT      C program file to parse
+  -d, --debug        Generate assembly with extra information (for debugging purposes)
+  -o OUT, --out OUT  File name to store generated executable
+  -l, --lex          Store output of lexer
+  -D, --dot          Generate AST graph as DOT format
+  -p, --png          Generate AST graph as png format
+  -I, --ir           Dump the generated Intermediate representation
+  --sym              Dump the symbol table
+  -S, --asm          Store the generated assembly file
+  -R, --exec         Execute the generated program
 ```
-$ ./bin/parser -h
-```
+
 
 ## Features
 
-### Basic
+### Basic Features
 - Native data types: Int, Char, Float
 - Variables and Expressions
 - Conditional: if, if-else, switch-case
 - Loops: for, while, do-while
 - Break, Continue
+- Switch Case
 - Arrays: Single and multidimensional
 - Input,output
 - Functions, recursion
@@ -56,9 +68,14 @@ $ ./bin/parser -h
 - Typedef
 
 ### Advanced Features
-- Dynamic memory allocation:
-- Register allocation optimization
-- 
+- Dynamic memory allocation (malloc, free)
+- Register allocation optimization using conditional spilling
+- File Handling
+- Fork and exec system calls
+- Storage Optimization for Char and string
+- Nested Struct and Array Initializers
+- Multidimensional arrays as function parameters
+- Short circuit expression evaluation
 
 ## Members
 - [Dev Chauhan](https://github.com/dev-chauhan)
