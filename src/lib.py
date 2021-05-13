@@ -40,6 +40,10 @@ int scanint(){
     return tmp;
 }
 
+void* bufcpy(void * d, void* s, int cnt){
+    return memcpy(d, s, cnt);
+}
+
 void* malloc(int size);
 void free(void *ptr);
 '''

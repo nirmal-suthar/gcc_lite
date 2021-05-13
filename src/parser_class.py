@@ -173,9 +173,9 @@ class Function(_BASENODE):
                 size += 8
             else:
                 if vtype.is_array():
-                    self.param_size += ADDR_SIZE
+                    size += ADDR_SIZE
                 else:
-                    self.param_size += vtype.get_size()
+                    size += vtype.get_size()
 
         # size = 0
         # for name, vartype in self.args:
@@ -498,7 +498,7 @@ class Identifier(BaseExpr):
         self.get_type()
     
     def gen(self, lvalue = False):
-        if self.expr_type.is_struct_type() or self.expr_type.is_array():
+        if self.expr_type.is_array():
             # store starting addr of struct/array
             self.place = tac.newtmp()
             symtable.add_var(self.place, self.expr_type)
@@ -506,6 +506,11 @@ class Identifier(BaseExpr):
                 tac.emit(f"{self.place} = {self.name}")
             else:
                 tac.emit(f"{self.place} = & {self.name}")
+        elif self.expr_type.is_struct_type():
+            # store starting addr of struct/array
+            self.place = tac.newtmp()
+            symtable.add_var(self.place, self.expr_type)
+            tac.emit(f"{self.place} = & {self.name}")
         else:
             if self.expr_type.is_float() and self.expr_type.is_param:
                 self.place = tac.newtmp()
