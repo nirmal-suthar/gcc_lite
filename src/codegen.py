@@ -512,7 +512,7 @@ class AssemblyGen:
                 self.add(f'pushl ${func.ret_type.get_size()}')
                 self.add(f'pushl %eax')
                 self.add(f'pushl {hex(scope.lookup_info("ret@")["offset"])}(%ebp)')
-                self.add(f'call memcpy')
+                self.add(f'call bufcpy')
                 self.add(f'addl $12, %esp')
                 self.add(f'movl {hex(scope.lookup_info("ret@")["offset"])}(%ebp), %eax')
                 

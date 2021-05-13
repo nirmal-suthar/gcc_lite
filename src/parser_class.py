@@ -502,8 +502,11 @@ class Identifier(BaseExpr):
             # store starting addr of struct/array
             self.place = tac.newtmp()
             symtable.add_var(self.place, self.expr_type)
-            if self.expr_type.is_param and not lvalue:
-                tac.emit(f"{self.place} = {self.name}")
+            if self.expr_type.is_param:
+                if lvalue:
+                    tac.emit(f"{self.place} = & {self.name}")
+                else:
+                    tac.emit(f"{self.place} = {self.name}")
             else:
                 tac.emit(f"{self.place} = & {self.name}")
         elif self.expr_type.is_struct_type():

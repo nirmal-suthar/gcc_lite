@@ -1,8 +1,11 @@
 stdlib = '''
 int printf(char *s);
 int scanf(char *s);
-void strcpy(char *d, char *s);
+
 void* memcpy(void* d, void* s, int cnt);
+
+void strcpy(char *d, char *s);
+int strlen(char *s);
 
 int open(char* filename, int flags);
 int close(int fd);
@@ -21,10 +24,8 @@ float log(float x);
 float sqrt(float x);
 float pow(float base, float power);
 
-
-// TODO: add malloc, free and math function
-
-// Extra functions
+void* malloc(int size);
+void free(void *ptr);
 
 void prints(char* s){
     printf("%s", s);

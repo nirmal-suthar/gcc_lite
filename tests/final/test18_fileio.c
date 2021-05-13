@@ -1,12 +1,14 @@
 int main()
 {
-    int fd_out, x;
-    char file_name[10] = "a.txt";
+    int O_CREAT = 64;
+    int O_RDWD = 2;
+    int O_RDONLY = 0;
+    int O_WRONLY = 1;
+
+    int fd, x;
     char msg[20] = "hello world";
-
-    fd_out = open(file_name, 2);
-    x = write(fd_out, msg , strlen(msg)+1);
-
-    close(fd_out);
-
+    fd = open("fileio.txt", O_CREAT | O_RDWD); 
+    x = write(fd, msg , strlen(msg)+1);
+    printf("length of buffer: %d", strlen(msg)+1);
+    close(fd);
 }
