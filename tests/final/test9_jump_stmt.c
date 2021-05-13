@@ -24,5 +24,6 @@ int main(){
         break;
 
     }
+    printf("%d %d %d", x, i, y);
     return 0;
 }

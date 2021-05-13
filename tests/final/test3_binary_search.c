@@ -2,19 +2,20 @@ int main()
 {
    int c, first, last, middle, n, search, array[100];
  
-   prints("Enter number of elements\n");
-   n = scanint();
- 
-   prints("Enter ");
-   printn(n);
-   prints(" integers\n");
+   printf("Enter number of elements\n");
+   scanf("%d", &n);
+
+   printf("Enter ");
+   printf("%d",n);
+   printf(" integers\n");
  
    for (c = 0; c < n; c=c+1){
-      array[c] = scanint();
+      scanf("%d", &array[c]);
    }
-   prints("Enter value to find\n");
-   search = scanint();
- 
+   printf("Enter value to find\n");
+   scanf("%d", &search);
+   
+
    first = 0;
    last = n - 1;
    middle = (first+last)/2;
@@ -23,10 +24,10 @@ int main()
       if (array[middle] < search)
          first = middle + 1;    
       else if (array[middle] == search) {
-         printn(search);
-         prints(" found at location ");
-         printn(middle+1);
-         prints("\n");
+         printf("%d",search);
+         printf(" found at location ");
+         printf("%d",middle+1);
+         printf("\n");
          break;
       }
       else
@@ -35,9 +36,9 @@ int main()
       middle = (first + last)/2;
    }
    if (first > last){
-      prints("Not found! ");
-      printn(search);
-      prints(" is not present in the list.\n");
+      printf("Not found! ");
+      printf("%d",search);
+      printf(" is not present in the list.\n");
   }
  
    return 0;   

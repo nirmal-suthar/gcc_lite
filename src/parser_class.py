@@ -616,10 +616,10 @@ class OpExpr(BaseExpr):
         inferred_type = 'int'
 
         # if any of the operand is char than cast it to `int` for ops
-        if self.lhs.expr_type == VarType(0,'char'):
+        if isinstance(self.lhs, BaseExpr) and self.lhs.expr_type == VarType(0,'char'):
             self.lhs = CastExpr.get_cast(VarType(0, 'int'), self.lhs)
 
-        if self.rhs.expr_type == VarType(0,'char'):
+        if isinstance(self.rhs, BaseExpr) and self.rhs.expr_type == VarType(0,'char'):
             self.rhs = CastExpr.get_cast(VarType(0, 'int'), self.rhs)
 
         # will be error when (void *) + int 
@@ -725,7 +725,7 @@ class UnaryExpr(OpExpr):
         symtable.add_var(self.place, self.expr_type)
 
         if self.ops == 'sizeof':
-            tac.emit(f"{self.place} = {self.rhs.get_size()}")
+            tac.emit(f"{self.place} = ${self.rhs.get_size()}")
         elif self.ops == '++':
             self.rhs.gen(lvalue=True)
             tac.backpatch(getattr(self.rhs, 'nextlist', []), tac.nextquad())
@@ -826,7 +826,7 @@ class UnaryExpr(OpExpr):
         inferred_type = 'int'
 
         # if any of the operand is char than cast it to `int` for ops
-        if self.rhs.expr_type == VarType(0,'char'):
+        if isinstance(self.rhs, BaseExpr) and self.rhs.expr_type == VarType(0,'char'):
             self.rhs = CastExpr.get_cast(VarType(0, 'int'), self.rhs)
 
         # sizeof ops

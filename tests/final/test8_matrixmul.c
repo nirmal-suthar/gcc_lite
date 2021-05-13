@@ -11,24 +11,26 @@ int main() {
   int na, nb, nc;
 
   //scanmat(a0, &r1, &c1);
-  prints("Input matrix size (m,n) ");
-  r1 = scanint(); c1 = scanint();
-  prints("Enter matrix elements:\n");
+  printf("Input matrix size (m,n) ");
+  scanf("%d", &r1);
+  scanf("%d", &c1);
+  printf("Enter matrix elements:\n");
   for (i=0; i<r1; i=i+1) {
     for (j=0; j<c1; j=j+1) {
       idx = indexOf(r1, c1, i, j);
-      a[idx] = scanint();
+      scanf("%d", &a[idx]);
     }
   }
 
   //scanmat(b0, &r2, &c2);
-  prints("Input matrix size (m,n) ");
-  r2 = scanint(); c2 = scanint();
-  prints("Enter matrix elements:\n");
+  printf("Input matrix size (m,n) ");
+  scanf("%d", &r2);
+  scanf("%d", &c2);
+  printf("Enter matrix elements:\n");
   for (i=0; i<r2; i=i+1) {
     for (j=0; j<c2; j=j+1) {
       idx = indexOf(r2, c2, i, j);
-      b[idx] = scanint();
+      scanf("%d",&b[idx]);
     }
   }
 
@@ -45,14 +47,14 @@ int main() {
     }
   }  
 
-  prints("Matrix product:\n");
+  printf("Matrix product:\n");
   //printmat(c0, r1, c2);
   for (i=0; i<r1; i=i+1) {
     for (j=0; j<c2; j=j+1) {
       idx = indexOf(r1, c2, i, j);
-      printn(c[idx]);prints(" ");
+      printf("%d ",c[idx]);
     }
-    prints("\n");
+    printf("\n");
   }
 
   return 0;

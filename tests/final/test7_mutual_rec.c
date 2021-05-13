@@ -10,16 +10,16 @@ int even(int number);
 
 int main() {
   int T; 
-  T = scanint();
+  scanf("%d",&T);
   while (T) {
     int n; 
     T = T-1;
-    n = scanint();
-    prints("odd: ");
-    printn(odd(n));
-    prints("\neven: ");
-    printn(even(n));
-    prints("\n");
+    scanf("%d",&n);
+    printf("odd: ");
+    printf("%d",odd(n));
+    printf("\neven: ");
+    printf("%d",even(n));
+    printf("\n");
   }
   return 0;
 }

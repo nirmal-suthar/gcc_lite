@@ -739,13 +739,13 @@ def p_selection_statement(p):
 
 
 def p_iteration_statement_while(p):
-    ''' iteration_statement : WHILE '(' expression ')' loop_scope compound_statement
+    ''' iteration_statement : WHILE '(' expression ')' loop_scope statement
     '''
     p[0] = IterStmt(p[1], p[3], p[6]) 
     
 def p_iteration_statement_for(p):
-    ''' iteration_statement : FOR '(' expression_statement expression_statement ')' loop_scope compound_statement
-            | FOR '(' expression_statement expression_statement expression ')' loop_scope compound_statement
+    ''' iteration_statement : FOR '(' expression_statement expression_statement ')' loop_scope statement
+            | FOR '(' expression_statement expression_statement expression ')' loop_scope statement
     '''
     if len(p)==8:
         p[0] = IterStmt(p[1], (p[3](),p[4](),None), p[7])
