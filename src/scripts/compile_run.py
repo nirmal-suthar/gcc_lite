@@ -83,5 +83,5 @@ if __name__ == "__main__":
         graph.write_png(png_file)
         print("Graph generated {}".format(png_file))
     
-    os.system("gcc -m32 --no-pie " + args.out.split('.')[-2] + '.s')
+    os.system("gcc -m32 --no-pie " + args.out.split('.')[-2] + '.s -lm')
     os.system("./a.out")

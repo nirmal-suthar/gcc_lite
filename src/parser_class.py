@@ -196,6 +196,7 @@ class VarType(_BASENODE):
         self._type = _type
         self.arr_offset = arr_offset
         self.is_tmp = False
+        self.is_param = False
 
     def get_size(self) -> int:
         return self._get_size()
@@ -466,11 +467,11 @@ class Const(BaseExpr):
         elif self.dvalue == 'float':
             self.expr_type = VarType(0, 'float')
         elif self.dvalue == 'char':
-            self.const = str(ord(self.const[1:-1]))
+            self.const = str(ord(self.const[1:-1].encode('utf-8').decode('unicode_escape')))
             self.dvalue = 'int'
             self.expr_type = VarType(0, 'int')
         elif self.dvalue == 'STRING_LITERAL':
-            self.expr_type = VarType(1, 'char')
+            self.expr_type = VarType(1, 'char', [Const(str(len(self.const.encode('utf-8').decode('unicode_escape'))-1), 'int')])
         else:
             parser_error('Unknown Constant type')
 
@@ -491,7 +492,10 @@ class Identifier(BaseExpr):
             # store starting addr of struct/array
             self.place = tac.newtmp()
             symtable.add_var(self.place, self.expr_type)
-            tac.emit(f"{self.place} = & {self.name}")
+            if self.expr_type.is_param and not lvalue:
+                tac.emit(f"{self.place} = {self.name}")
+            else:
+                tac.emit(f"{self.place} = & {self.name}")
         else:
             if lvalue:
                 self.place = tac.newtmp()
@@ -565,7 +569,7 @@ class OpExpr(BaseExpr):
 
             if self.expr_type.basic_type() == 'float' and not self.expr_type.is_pointer():
                 operator = 'float' + self.ops
-            elif self.ops in ['<<', '>>', '|', '&', '%']:
+            elif self.ops in ['<<', '>>', '|', '&', '%', '^']:
                 operator = self.ops
             else:
                 operator = 'int' + self.ops
@@ -966,7 +970,10 @@ class PostfixExpr(OpExpr):
 
                 # push parameters other than the first one
                 for param in reversed(self.rhs):
-                    args_size += param.expr_type.get_size()
+                    if param.expr_type.is_array():
+                        args_size += ADDR_SIZE
+                    else:
+                        args_size += param.expr_type.get_size()
                     tac.emit(f"param {param.place}")
 
                 # call the function
@@ -1242,6 +1249,10 @@ class AssignExpr(OpExpr):
 
     def get_type(self):
         
+        if self.lhs.expr_type.is_array():
+            parser_error("assignment to expression with array type")
+            return
+
         if not self.lhs.has_lvalue():
             parser_error("lvalue required as left operand of assignment")
             self.expr_type = self.lhs.expr_type
@@ -1359,6 +1370,9 @@ class InitDeclarator(_BaseDecl):
             elif isinstance(self.initializer, Const) and self.initializer.expr_type.is_string():
                 if not self.expr_type.is_string():
                     parser_error(f"Can not assign string to non string symbol {self.declarator.name}")
+                    return
+                if self.expr_type.get_size() < self.initializer.expr_type.get_size():
+                    parser_error(f"initializer-string for array of chars is too long")
                     return
                 # symtable.add_var(self.declarator.name, self.expr_type, is_static=parser.is_static)
             else:
@@ -1730,16 +1744,24 @@ class Initializers(_BASENODE):
     def __init__(self, init_list):
         super().__init__()
         self.init_list = init_list
+        self.check_not_string()
 
     def gen(self):
         for init in self.init_list:
             init.gen()
             tac.backpatch(getattr(init, 'nextlist', []), tac.nextquad())
     
+    def check_not_string(self):
+        for e in self.init_list:
+            if isinstance(e, Const) and e.expr_type.is_string():
+                parser_error("string is not allowed in initializer")
+                return
+                
     def compatible_with(self, vartype : VarType, error=False):
         
         if vartype.is_array():
             # lhs is array
+            
             if len(self.init_list) > vartype.get_array_len():
                 if error:
                     parser_error(f"too many initializers")
