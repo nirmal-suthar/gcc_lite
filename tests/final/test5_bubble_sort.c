@@ -3,16 +3,17 @@ int main(){
     int T ;
     int i,c,d,n,len,t,u,k=1;
     int d_lim, c_lim;
-    prints("Enter the number of test cases : ");
-    T = scanint();
+    printf("Enter the number of test cases : ");
+    scanf("%d", &T);
     while(T){
 	T = T-1;
-	prints("Enter the length of the array (<=1000) : ");
-        len = scanint();
+	printf("Enter the length of the array (<=1000) : ");
+        scanf("%d", &len);
+        printf("Enter %d numbers: ", len);
         for(i=0;i<len;i=i+1){
-           list[i] = scanint();
+            scanf("%d", &list[i]);
         }
-	prints("Sorting the array............ \n");
+	printf("Sorting the array............ \n");
   
 	c_lim = len - 1;
         for(c =0;c< c_lim;c=c+1){
@@ -30,10 +31,10 @@ int main(){
        	   }
     	}
         for(i=0;i<len-1;i=i+1){
-           printn(list[i]); prints(" ");
+           printf("%d ",list[i]);
         }
-        printn(list[i]);
-	prints("\n");
+        printf("%d",list[i]);
+	printf("\n");
     }
     return 0;
 }

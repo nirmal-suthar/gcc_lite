@@ -2,7 +2,6 @@ int main() {
    int l =2 ;
    int x;
    x= l > 3 ? 2 : 7 ;
-   printn(x);
-   
+   printf("x - %d\n",x);
    return 0;
 }

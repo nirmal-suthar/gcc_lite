@@ -556,8 +556,16 @@ def p_function_declarator(p):
         p[0] = FuncDirectDecl(0, p[1], p[3])
     else:
         p[0] = FuncDirectDecl(p[1], p[2], p[4])
-        
 
+def p_function_declarator1(p):
+    ''' function_declarator : IDENTIFIER '(' ')'
+            | pointer IDENTIFIER '(' ')'
+    '''
+    if len(p)==4:
+        p[0] = FuncDirectDecl(0, p[1], [])
+    else:
+        p[0] = FuncDirectDecl(p[1], p[2], [])
+        
 def p_pointer(p):
     ''' pointer : '*'
             | '*' pointer
@@ -738,13 +746,13 @@ def p_selection_statement(p):
 
 
 def p_iteration_statement_while(p):
-    ''' iteration_statement : WHILE '(' expression ')' loop_scope compound_statement
+    ''' iteration_statement : WHILE '(' expression ')' loop_scope statement
     '''
     p[0] = IterStmt(p[1], p[3], p[6]) 
     
 def p_iteration_statement_for(p):
-    ''' iteration_statement : FOR '(' expression_statement expression_statement ')' loop_scope compound_statement
-            | FOR '(' expression_statement expression_statement expression ')' loop_scope compound_statement
+    ''' iteration_statement : FOR '(' expression_statement expression_statement ')' loop_scope statement
+            | FOR '(' expression_statement expression_statement expression ')' loop_scope statement
     '''
     if len(p)==8:
         p[0] = IterStmt(p[1], (p[3](),p[4](),None), p[7])

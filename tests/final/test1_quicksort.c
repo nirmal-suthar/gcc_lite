@@ -36,32 +36,31 @@ int main()
   int T;
   int i, j, len, k;
   int* a;
-  prints("Input the number of test cases : ");
-  T = scanint();
+  printf("Input the number of test cases : ");
+  scanf("%d",&T);
   j=0;
 
   while (T) {
     T = T-1;
     j = j +1;
-    prints("Input the length of the array : ");
-    len = scanint();
-    prints("Testcase No. ");
-    printn(j);
-    prints(": now input the array elements -\n");
+    printf("Input the length of the array : ");
+    scanf("%d", &len);
+    printf("Testcase No. ");
+    printf("%d",j);
+    printf(": now input the array elements -\n");
     for (i=0; i<len; i = i+1) {
-       arr[i] = scanint() ;
+      scanf("%d",&arr[i]);
     }
     // return 0;
     i=0;
     a = &arr[i];
     quicksort(a, 0, len-1);
-    prints("sorted array - \n");
+    printf("sorted array - \n");
     for (i=0; i<len; i=i+1) {
       k = arr[i];
-      printn(k);
-      prints(" ");
+      printf("%d ",k);
     }
-    prints("\n");
+    printf("\n");
   }
 
   return 0;

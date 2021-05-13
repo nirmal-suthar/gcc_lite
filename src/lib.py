@@ -40,4 +40,6 @@ int scanint(){
     return tmp;
 }
 
+void* malloc(int size);
+void free(void *ptr);
 '''
