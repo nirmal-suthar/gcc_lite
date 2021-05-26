@@ -1,11 +1,17 @@
 # gcc_lite
-C-Compiler (project+assignment) for course CS335, 2021 - II 
+Toy C-Compiler for course CS335, 2021 - II 
 
 **Source language** :- C
 
 **Implementation language** :- Python
 
 **Target language** :- x86 assembly language
+
+## Members
+- [Dev Chauhan](https://github.com/dev-chauhan)
+- [Hitesh Gupta](https://github.com/hitesh-gupta-2111)
+- [Naman Biyani](https://github.com/namanbiyani)
+- [Nirmal Suthar](https://github.com/nirmal-suthar)
 
 ## Structure
 
@@ -28,7 +34,7 @@ $ make
 ```
 
 ### For more informations about usage
-```bash
+```
 usage: gcc_lite [-h] [-d] [-o OUT] [-l] [-D] [-p] [-I] [--sym] [-S] [-R] input
 
 Compiler for C programs
@@ -77,12 +83,6 @@ optional arguments:
 - Nested Struct and Array Initializers
 - Multidimensional arrays as function parameters
 - Short circuit expression evaluation
-
-## Members
-- [Dev Chauhan](https://github.com/dev-chauhan)
-- [Hitesh Gupta](https://github.com/hitesh-gupta-2111)
-- [Naman Biyani](https://github.com/namanbiyani)
-- [Nirmal Suthar](https://github.com/nirmal-suthar)
 
 ## Acknowledgments
 
